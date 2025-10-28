@@ -17,7 +17,7 @@ std::vector<RectanglePlacement> InstanceGenerator::generate_rectangles(int num_r
         int height = height_dist(gen);
         int width = width_dist(gen);
 
-        rectangle_placements.emplace_back(width, height, -1, -1, false, -1);
+        rectangle_placements.emplace_back(width, height, 0, 0, false, i);
     }
 
     return rectangle_placements;

@@ -2,44 +2,37 @@
 #define SOLVER_H
 
 #include "OptimizationProblem.h"
+#include "Input.h"
 #include <memory>
+#include <vector>
 
 class Solver {
 public:
     virtual ~Solver() = default;
-    virtual Input solve(OptimizationProblem& problem, const Input& initial_solution) = 0;
-
+    virtual std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) = 0;
 };
 
-class NeighborhoodSolver : Solver {public:
-    Input solve(Input& input);
-    std::vector<Input> construct_neighbors(Input& input);
-};
-
-class GeometryBasedNeighborhoodSolver : Solver {
+class NeighborhoodSolver : public Solver {
 public:
-    Input solve(Input& input);
-    std::vector<Input> construct_neighbors(Input& input);
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
+    virtual std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) = 0;
 };
 
-class RuleBasedNeighborhoodSolver : Solver {
+class GeometryBasedNeighborhoodSolver : public NeighborhoodSolver {
 public:
-    Input solve(Input& input);
-    std::vector<Input> construct_neighbors(Input& input);
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
+    std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) override;
 };
 
-
-class SemiOverlappingAllowedNeighborhoodSolver : Solver {
-public:
-    Input solve(Input& input);
-    std::vector<Input> construct_neighbors(Input& input);
+class RuleBasedNeighborhoodSolver : public NeighborhoodSolver {
+protected:
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
+    std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) override;
 };
 
-
-class GreedySolver: Solver {
+class GreedySolver : public Solver {
 public:
-    Input solve(Input& input);
-    std::vector<Input> construct_neighbors(Input& input);
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
 };
 
 #endif // SOLVER_H

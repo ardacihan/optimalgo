@@ -10,25 +10,13 @@
 
 class OptimizationProblem {
 public:
-    std::vector<Input> inputs;
-    std::set<std::function<bool(Input)>> constraints;
+    Input current_solution;
 
     virtual int objective(const Input& input) = 0;
     virtual ~OptimizationProblem() = default;
 
 
-    bool apply_constraints(const Input& input) {
-        for (auto&& constraint : constraints) {
-            if (!constraint(input)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    void add_constraint(const std::function<bool(Input)>& constraint) {
-        //todo fix this constraints.insert(constraint);
-    }
+    virtual bool apply_constraints(const Input& input) { return false;   }
 };
 
 #endif // OPTIMIZATIONPROBLEM_H
