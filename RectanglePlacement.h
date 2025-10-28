@@ -1,15 +1,34 @@
-#ifndef RECTANGLE_PLACEMENT_H
-#define RECTANGLE_PLACEMENT_H
+#ifndef RECTANGLEPLACEMENT_H
+#define RECTANGLEPLACEMENT_H
+#include "Input.h"
 
-#include "Rectangle.h"
-
-class RectanglePlacement {
+class RectanglePlacement : Input {
 public:
-    Rectangle rectangle;
-    int x, y;
-    int boundingBoxId;
+    int width;
+    int height;
+    int x;
+    int y;
+    bool rotated;
+    int box_id;
 
-    RectanglePlacement(Rectangle r, int x, int y, int boundingBoxId);
+    // Constructor
+    RectanglePlacement(int w, int h, int x_pos, int y_pos, bool rot, int bid)
+        : width(w), height(h), x(x_pos), y(y_pos), rotated(rot), box_id(bid) {}
+
+    // Default constructor
+    RectanglePlacement() : width(0), height(0), x(0), y(0), rotated(false), box_id(-1) {}
+
+    // Get actual width considering rotation
+    int get_actual_width() const {
+        return rotated ? height : width;
+    }
+
+    // Get actual height considering rotation
+    int get_actual_height() const {
+        return rotated ? width : height;
+    }
+
+    void rotate() { this->rotated = !this->rotated;}
 };
 
-#endif
+#endif // RECTANGLEPLACEMENT_H
