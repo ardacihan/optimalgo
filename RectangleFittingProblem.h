@@ -30,7 +30,7 @@ public:
 
     static bool edges_touching(const RectanglePlacement r1, const RectanglePlacement r2);
 
-    int calculate_cover_area(std::vector<RectanglePlacement> current_solution);
+    std::vector<int> calculate_cover_area_in_bounding_box(std::vector<RectanglePlacement> current_solution);
 
 
     // Getter for box length

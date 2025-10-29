@@ -1,5 +1,6 @@
 #include "RectangleFittingProblem.h"
 #include <algorithm>
+#include <map>
 
 bool RectangleFittingProblem::edges_touching(const RectanglePlacement r1, const RectanglePlacement r2) {
     // Get the actual dimensions considering rotation
@@ -44,11 +45,9 @@ bool RectangleFittingProblem::edges_touching(const RectanglePlacement r1, const 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution)  {
     int punishment_for_each_box = -10;
     int reward_for_touching_rectangles = 4;
-    int punishement_for_almost_empty_boxes = -5;
-    int reward_for_filling_boxes = 10;
+    int reward_for_filling_boxes = 5;
     int objective = 0;
 
-    // Calculate unique boxes count
     std::vector<int> unique_boxes;
     for (const RectanglePlacement& rectangle_placement : current_solution) {
         unique_boxes.push_back(rectangle_placement.box_id);
@@ -56,31 +55,28 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     std::sort(unique_boxes.begin(), unique_boxes.end());
     auto last = std::unique(unique_boxes.begin(), unique_boxes.end());
     unique_boxes.erase(last, unique_boxes.end());
-    objective += punishment_for_each_box * unique_boxes.size(); // Add punishment
+    objective += punishment_for_each_box * unique_boxes.size();
 
-    // Calculate corner touching score
-    int corner_touching_reward = 0;
+    std::vector<int> coverages = calculate_cover_area_in_bounding_box(current_solution);
+    for (int coverage : coverages) {
+        objective += coverage / 10;
+    }
+
     int n = current_solution.size();
-
-    // Check corner touching between rectangles
     for (int i = 0; i < n; ++i) {
         const RectanglePlacement& rect1 = current_solution[i];
-
-        // Check if rectangle touches bounding box corners/edges
-        if (rect1.x == 0 || rect1.x + rect1.width == L) {
-            corner_touching_reward += reward_for_touching_rectangles;
+        if (rect1.x == 0 || rect1.x + rect1.get_actual_width() == L) {
+            objective += reward_for_touching_rectangles;
         }
-        if (rect1.y == 0 || rect1.y + rect1.height == L) {
-            corner_touching_reward += reward_for_touching_rectangles;
+        if (rect1.y == 0 || rect1.y + rect1.get_actual_height() == L) {
+            objective += reward_for_touching_rectangles;
         }
         for (int j = i + 1; j < n; ++j) {
             if (edges_touching(rect1, current_solution[j])) {
-                objective += reward_for_touching_rectangles; // touching other rectangles are good;
+                objective += reward_for_touching_rectangles;
             }
         }
     }
-
-    objective += corner_touching_reward;
 
     return objective;
 }
@@ -111,4 +107,22 @@ bool RectangleFittingProblem::check_within_boxes(const std::vector<RectanglePlac
             }
     }
     return true;
+}
+
+std::vector<int> RectangleFittingProblem::calculate_cover_area_in_bounding_box(std::vector<RectanglePlacement> current_solution) {
+    std::map<int, int> box_covered_area;
+
+    for (const auto& rect : current_solution) {
+        int box_id = rect.box_id;
+        int rect_area = rect.get_actual_width() * rect.get_actual_height();
+        box_covered_area[box_id] += rect_area;
+    }
+
+    std::vector<int> coverage_percentages;
+    for (const auto& [box_id, covered_area] : box_covered_area) {
+        int coverage_percentage = (covered_area * 100) / (L * L);
+        coverage_percentages.push_back(coverage_percentage);
+    }
+
+    return coverage_percentages;
 }
