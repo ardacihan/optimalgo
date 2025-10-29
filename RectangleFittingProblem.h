@@ -13,15 +13,15 @@ private:
 
 public:
     RectangleFittingProblem(int L, std::vector<RectanglePlacement>& current_solution) {
+        this->L = L;
         bool a = check_no_overlaps(current_solution);
         bool b = check_within_boxes(current_solution);
         if (a && b) {
-            this->L = L;
             this->current_solution = current_solution;
         };
     };
 
-    int objective(const std::vector<RectanglePlacement>& input);
+    int objective(const std::vector<RectanglePlacement>& current_solution);
 
     bool check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const;
     bool check_within_boxes(const std::vector<RectanglePlacement>& current_solution) const;
@@ -35,6 +35,8 @@ public:
 
     // Getter for box length
     int get_box_length() const { return L; }
+
+    std::vector<RectanglePlacement> get_current_solution() { return current_solution;}
 };
 
 #endif // RECTANGLEFITTINGPROBLEM_H

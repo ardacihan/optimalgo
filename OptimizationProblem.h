@@ -12,11 +12,11 @@ class OptimizationProblem {
 public:
     Input current_solution;
 
-    virtual int objective(const Input& input) = 0;
-    virtual ~OptimizationProblem() = default;
+     int objective(const Input& input);
+     ~OptimizationProblem() = default;
 
 
-    virtual bool apply_constraints(const Input& input) { return false;   }
+    bool apply_constraints(const Input& input) { return false;   }
 };
 
 #endif // OPTIMIZATIONPROBLEM_H

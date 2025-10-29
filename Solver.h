@@ -5,34 +5,40 @@
 #include "Input.h"
 #include <memory>
 #include <vector>
+#include <set>
+
+#include "RectangleFittingProblem.h"
+#include "RectanglePlacement.h"
 
 class Solver {
 public:
-    virtual ~Solver() = default;
-    virtual std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) = 0;
+    ~Solver() = default;
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
 };
 
 class NeighborhoodSolver : public Solver {
 public:
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
-    virtual std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) = 0;
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
+    virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 };
 
 class GeometryBasedNeighborhoodSolver : public NeighborhoodSolver {
 public:
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
-    std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) override;
+    std::vector<RectanglePlacement> solve(RectangleFittingProblem& problem);
+    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem) override;
+    std::vector<RectanglePlacement> select_next_solution(
+        RectangleFittingProblem &problem, std::vector<std::vector<RectanglePlacement>> neighborhood);
 };
 
 class RuleBasedNeighborhoodSolver : public NeighborhoodSolver {
 protected:
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
-    std::vector<std::unique_ptr<Input>> construct_neighbors(OptimizationProblem& problem, const Input& input) override;
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
+    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem) override;
 };
 
 class GreedySolver : public Solver {
 public:
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution) override;
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
 };
 
 #endif // SOLVER_H

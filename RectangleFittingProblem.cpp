@@ -1,6 +1,7 @@
 #include "RectangleFittingProblem.h"
 #include <algorithm>
 #include <map>
+#include <iostream>
 
 bool RectangleFittingProblem::edges_touching(const RectanglePlacement r1, const RectanglePlacement r2) {
     // Get the actual dimensions considering rotation
@@ -39,7 +40,6 @@ bool RectangleFittingProblem::edges_touching(const RectanglePlacement r1, const 
     }
     return false;
 }
-
 
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution)  {
@@ -100,11 +100,15 @@ bool RectangleFittingProblem::check_no_overlaps(const std::vector<RectanglePlace
 
 bool RectangleFittingProblem::check_within_boxes(const std::vector<RectanglePlacement>& current_solution) const {
     for (const auto& rect : current_solution) {
-        if (rect.x < 0 || rect.y < 0 ||
-            rect.x + rect.get_actual_width() > L ||
-            rect.y + rect.get_actual_height() > L) {
+        double right = rect.x + rect.get_actual_width();
+        double bottom = rect.y + rect.get_actual_height();
+
+        if (rect.x < 0 || rect.y < 0 || right > L || bottom > L) {
+            std::cout << "Rectangle out of bounds: (" << rect.x << ", " << rect.y
+                      << ") to (" << right << ", " << bottom << ") in box [0,0] to ["
+                      << L << "," << L << "]\n";
             return false;
-            }
+        }
     }
     return true;
 }
