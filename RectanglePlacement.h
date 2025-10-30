@@ -5,6 +5,11 @@
 #include <vector>
 #include <memory>
 
+struct Point {
+    int x, y;
+    Point(int x = 0, int y = 0) : x(x), y(y) {}
+};
+
 class RectanglePlacement : public Input {
 public:
     int width;

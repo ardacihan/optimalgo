@@ -13,19 +13,23 @@
 class Solver {
 public:
     ~Solver() = default;
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
+    std::unique_ptr<Input> solve(OptimizationProblem& problem, int max_steps);
 };
 
 class NeighborhoodSolver : public Solver {
 public:
-    std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
+    std::unique_ptr<Input> solve(OptimizationProblem& problem,int max_steps);
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 };
 
 class GeometryBasedNeighborhoodSolver : public NeighborhoodSolver {
 public:
-    std::vector<RectanglePlacement> solve(RectangleFittingProblem& problem);
+    std::vector<RectanglePlacement> solve(RectangleFittingProblem& problem,int max_steps);
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem) override;
+
+    std::vector<Point> find_possible_positions(const std::vector<RectanglePlacement> &bounding_box,
+                                               const RectanglePlacement &rectangle, int grid_step);
+
     std::vector<RectanglePlacement> select_next_solution(
         RectangleFittingProblem &problem, std::vector<std::vector<RectanglePlacement>> neighborhood);
 };
