@@ -16,73 +16,108 @@
 
 // reward if total sum of boxes are better -> this is by choosing the neighbors
 // also reward them if moving them closer to other  -> this is by choosing the neighbors
-
-
-
-std::vector<std::vector<RectanglePlacement>>
-GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
-    std::vector<std::vector<RectanglePlacement>> neighborhood;
+std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
+    std::vector<std::vector<RectanglePlacement>> nbs;
     auto solution = problem.get_current_solution();
     int L = problem.get_box_length();
+    int n = solution.size();
 
-    // Get rectangles grouped by bounding box
-    auto box_groups = problem.group_rectangles_by_bounding_box(solution);
+    auto within = [&](const RectanglePlacement& r) {
+        return r.x >= 0 && r.y >= 0 &&
+               r.x + r.get_actual_width() <= L &&
+               r.y + r.get_actual_height() <= L;
+    };
 
-    // For each rectangle, try moving it to each other bounding box
-    for (size_t rect_idx = 0; rect_idx < solution.size(); rect_idx++) {
-        auto& rect = solution[rect_idx];
-        int current_box = rect.box_id;
+    auto collide = [&](const RectanglePlacement& r, int b, int ex) {
+        for (int i = 0; i < n; i++) {
+            if (i == ex) continue;
+            const auto& o = solution[i];
+            if (o.box_id != b) continue;
+            if (r.collides(o)) return true;
+        }
+        return false;
+    };
 
-        for (const auto& target_group : box_groups) {
-            if (target_group.empty()) continue;
+    auto area = [&](int b) {
+        long long a = 0;
+        for (auto& r : solution)
+            if (r.box_id == b)
+                a += r.get_actual_width() * r.get_actual_height();
+        return a;
+    };
 
-            int target_box = target_group[0].box_id;
-            if (target_box == current_box) continue;
+    std::set<int> boxes;
+    for (auto& r : solution)
+        boxes.insert(r.box_id);
 
-            // Get all rectangles in target box
-            auto target_rects = problem.getPlacementsInSameBoundingBoxRef(target_box);
-
-            // Find bottom-left position for this rectangle in target box
-            bool found_position = false;
-            RectanglePlacement new_placement = rect;
-            new_placement.box_id = target_box;
-
-            // Simple BL: Try along bottom, then move up row by row
-            for (int y = 0; y <= L - new_placement.get_actual_height() && !found_position; y++) {
-                for (int x = 0; x <= L - new_placement.get_actual_width() && !found_position; x++) {
-                    new_placement.x = x;
-                    new_placement.y = y;
-
-                    // Check if position is valid
-                    bool valid = true;
-                    for (const auto& existing : target_rects) {
-                        if (new_placement.collides(existing)) {
-                            valid = false;
-                            break;
-                        }
-                    }
-
-                    // Check within box boundaries
-                    if (valid &&
-                        new_placement.x + new_placement.get_actual_width() <= L &&
-                        new_placement.y + new_placement.get_actual_height() <= L) {
-                        found_position = true;
-                        break;
-                    }
-                }
+    std::vector<int> isolated;
+    for (int i = 0; i < n; i++) {
+        bool touch = false;
+        for (int j = 0; j < n; j++) {
+            if (i == j) continue;
+            if (solution[i].box_id != solution[j].box_id) continue;
+            if (problem.edges_touching(solution[i], solution[j])) {
+                touch = true;
+                break;
             }
+        }
+        if (!touch) isolated.push_back(i);
+    }
 
-            // If we found a valid position, create neighbor solution
-            if (found_position) {
-                auto neighbor_solution = solution;
-                neighbor_solution[rect_idx] = new_placement;
-                neighborhood.push_back(neighbor_solution);
+    for (int idx : isolated) {
+        for (int j = 0; j < n; j++) {
+            if (solution[j].box_id == solution[idx].box_id) continue;
+            RectanglePlacement moved = solution[idx];
+            moved.box_id = solution[j].box_id;
+
+            std::vector<std::pair<int,int>> pos = {
+                {solution[j].x + solution[j].get_actual_width(), solution[j].y},
+                {solution[j].x, solution[j].y + solution[j].get_actual_height()},
+                {solution[j].x, solution[j].y - moved.get_actual_height()}
+            };
+
+            for (auto [nx, ny] : pos) {
+                moved.x = nx;
+                moved.y = ny;
+                if (within(moved) && !collide(moved, moved.box_id, idx)) {
+                    auto nb = solution;
+                    nb[idx] = moved;
+                    nbs.push_back(nb);
+                }
             }
         }
     }
 
-    return neighborhood;
+    std::vector<std::pair<int, long long>> box_area;
+    for (int b : boxes)
+        box_area.push_back({b, area(b)});
+    std::sort(box_area.begin(), box_area.end(), [](auto& a, auto& b) {
+        return a.second < b.second;
+    });
+
+    if (box_area.size() >= 2) {
+        int from = box_area.front().first;
+        int to = box_area.back().first;
+        std::vector<int> from_rects;
+        for (int i = 0; i < n; i++)
+            if (solution[i].box_id == from)
+                from_rects.push_back(i);
+        for (int idx : from_rects) {
+            RectanglePlacement moved = solution[idx];
+            moved.box_id = to;
+            moved.x = 0;
+            moved.y = 0;
+            if (within(moved) && !collide(moved, moved.box_id, idx)) {
+                auto nb = solution;
+                nb[idx] = moved;
+                nbs.push_back(nb);
+            }
+        }
+    }
+
+    return nbs;
 }
+
 
 std::vector<RectanglePlacement>
 GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max_steps) {

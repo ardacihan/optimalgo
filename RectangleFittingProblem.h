@@ -30,7 +30,7 @@ public:
 
     std::vector<RectanglePlacement> get_rectangles() const { return current_solution; }
 
-    static bool edges_touching(const RectanglePlacement r1, const RectanglePlacement r2);
+    static bool edges_touching(const RectanglePlacement &r1, const RectanglePlacement &r2);
 
 
     // Getter for box length
