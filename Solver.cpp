@@ -3,15 +3,9 @@
 //
 
 #include "Solver.h"
-#include "OptimizationProblem.h"
 #include <vector>
-#include <memory>
-#include <set>
-#include "RectangleFittingProblem.h"
-#include "RectanglePlacement.h"
-#include <iostream>
-#include <map>
-#include <numeric>
+#include <algorithm>
+#include <stack>
 
 // get each rectangle
 // move them around
@@ -21,117 +15,131 @@
 
 // reward if total sum of boxes are better -> this is by choosing the neighbors
 // also reward them if moving them closer to other  -> this is by choosing the neighbors
-#include <algorithm>
-#include <cmath>
-#include <iostream>
+
+
 
 std::vector<std::vector<RectanglePlacement>>
 GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
-    std::cout << "[Neighborhood] Constructing efficient neighbors..." << std::endl;
-
     std::vector<std::vector<RectanglePlacement>> neighborhood;
-    const auto &solution = problem.get_current_solution();
+    auto solution = problem.get_current_solution();
     auto bounding_boxes = problem.group_rectangles_by_bounding_box(solution);
     int L = problem.get_box_length();
 
-    const int EDGE_STEPS = 3; // sliding steps along edges
+    std::stack<RectanglePlacement> rectangle_candidates;
 
-    for (size_t from_idx = 0; from_idx < bounding_boxes.size(); ++from_idx) {
-        for (const auto &rect : bounding_boxes[from_idx]) {
+    for (auto rectangles : solution) {
+        int size = rectangles.height * rectangles.width;
 
-            for (size_t to_idx = 0; to_idx < bounding_boxes.size(); ++to_idx) {
-                if (to_idx == from_idx) continue;
-
-                const auto &target_ref = bounding_boxes[to_idx].front();
-                int target_box_id = target_ref.box_id;
-
-                // Edge-based candidate positions (corners + edges)
-                std::vector<std::pair<int, int>> positions = {
-                    {0, 0}, {L - rect.width, 0}, {0, L - rect.height}, {L - rect.width, L - rect.height}
-                };
-
-                for (int s = 1; s < EDGE_STEPS; ++s) {
-                    int step_x = s * (L - rect.width) / EDGE_STEPS;
-                    int step_y = s * (L - rect.height) / EDGE_STEPS;
-                    positions.push_back({step_x, 0});                 // top
-                    positions.push_back({step_x, L - rect.height});   // bottom
-                    positions.push_back({0, step_y});                 // left
-                    positions.push_back({L - rect.width, step_y});    // right
-                }
-
-                for (auto [nx, ny] : positions) {
-                    for (int rot = 0; rot < 2; ++rot) {
-                        int w = rot ? rect.height : rect.width;
-                        int h = rot ? rect.width  : rect.height;
-
-                        //EARLY CULLING: skip placements outside box boundaries
-                        if (nx < 0 || ny < 0 || nx + w > L || ny + h > L)
-                            continue;
-
-                        // Copy and modify
-                        auto neighbor = solution;
-                        for (auto &r : neighbor) {
-                            if (r.box_id == rect.box_id && r.x == rect.x && r.y == rect.y) {
-                                r.x = nx;
-                                r.y = ny;
-                                r.box_id = target_box_id;
-                                r.rotated = (rot != 0);
-                                break;
-                            }
-                        }
-
-                        if (problem.check_no_overlaps(neighbor))
-                            neighborhood.push_back(std::move(neighbor));
+        for (auto searched_rectangles : solution) { //for each rectangle, find a bigger rectangle to attach to
+            if (!searched_rectangles.equals(rectangles)) { // another rectangle needed for attachment
+                if (searched_rectangles.box_id != rectangles.box_id) { //we want to attach to another box
+                    if (searched_rectangles.height * searched_rectangles.width > size) {
+                        rectangle_candidates.push(searched_rectangles);
                     }
                 }
             }
+        }
+
+        while (!rectangle_candidates.empty()) {
+            auto r = rectangle_candidates.top();
+
+            // Try to place adjacent to the right first
+            RectanglePlacement right_placement = rectangles;
+            right_placement.box_id = r.box_id;
+            right_placement.x = r.x + r.get_actual_width();
+            right_placement.y = r.y;
+
+            // Try to place on top if right placement doesn't fit
+            RectanglePlacement top_placement = rectangles;
+            top_placement.box_id = r.box_id;
+            top_placement.x = r.x;
+            top_placement.y = r.y + r.get_actual_height();
+
+            auto rectangles_in_the_same_box = problem.getPlacementsInSameBoundingBoxRef(r.box_id);
+
+            // Check if right placement is valid
+            bool right_valid = (right_placement.x + right_placement.get_actual_width() <= L) &&
+                              (right_placement.y + right_placement.get_actual_height() <= L);
+
+            // Check if top placement is valid
+            bool top_valid = (top_placement.x + top_placement.get_actual_width() <= L) &&
+                            (top_placement.y + top_placement.get_actual_height() <= L);
+
+            // Check for collisions with other rectangles in the same bounding box
+            if (right_valid) {
+                bool has_collision = false;
+                for (const auto& existing_rect : rectangles_in_the_same_box) {
+                    if (right_placement.collides(existing_rect)) {
+                        has_collision = true;
+                        break;
+                    }
+                }
+                if (!has_collision) {
+                    // Create neighbor solution with right placement
+                    std::vector<RectanglePlacement> neighbor_solution = solution;
+                    // Replace the original rectangle with the new placement
+                    for (auto& rect : neighbor_solution) {
+                        if (rect.equals(rectangles)) {
+                            rect = right_placement;
+                            break;
+                        }
+                    }
+                    neighborhood.push_back(neighbor_solution);
+                }
+            }
+
+            // If right placement didn't work, try top placement
+            if (!right_valid || neighborhood.empty()) {
+                if (top_valid) {
+                    bool has_collision = false;
+                    for (const auto& existing_rect : rectangles_in_the_same_box) {
+                        if (top_placement.collides(existing_rect)) {
+                            has_collision = true;
+                            break;
+                        }
+                    }
+                    if (!has_collision) {
+                        // Create neighbor solution with top placement
+                        std::vector<RectanglePlacement> neighbor_solution = solution;
+                        // Replace the original rectangle with the new placement
+                        for (auto& rect : neighbor_solution) {
+                            if (rect.equals(rectangles)) {
+                                rect = top_placement;
+                                break;
+                            }
+                        }
+                        neighborhood.push_back(neighbor_solution);
+                    }
+                }
+            }
+
+            rectangle_candidates.pop();
         }
     }
 
     return neighborhood;
 }
 
+std::vector<RectanglePlacement>
+GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max_steps) {
+    std::vector<RectanglePlacement> solution = problem.get_current_solution();
+    if (max_steps <= 0) return solution;
 
-std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::select_next_solution(RectangleFittingProblem &problem,
-    std::vector<std::vector<RectanglePlacement>> neighborhood) {
-    std::vector<RectanglePlacement> next_solution = neighborhood[0]; //select first one as a placeholder
-    int next_solution_objective = problem.objective(next_solution);
-    std::cout << "=== CALCULATING NEIGHBOR OBJECTIVE SCORES ===" << std::endl;
+    auto neighbors = construct_neighbors(problem);
+    if (neighbors.empty()) return solution;
 
-    for (std::vector<RectanglePlacement> solution : neighborhood) {
-        int obj =  problem.objective(solution);
-        std::cout << "Solution with obj score;" << obj << std::endl;
-
-        if (obj >= next_solution_objective) {
-            next_solution = solution;
-            next_solution_objective = obj;
+    // Select neighbor with best objective
+    std::vector<RectanglePlacement> next_solution = neighbors[0];
+    int best_obj = problem.objective(next_solution);
+    for (auto &n : neighbors) {
+        int obj = problem.objective(n);
+        if (obj > best_obj) {
+            best_obj = obj;
+            next_solution = n;
         }
     }
 
-
-
-
-
-
-
-
-
-    return next_solution;
-}
-
-
-std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem& problem,int max_steps) {
-    std::cout << "=== START SOLVE WITH REMAINING " << max_steps << " STEPS" << std::endl;
-
-    std::vector<RectanglePlacement> initial_solution = problem.get_current_solution();
-    if (max_steps <= 0) {
-        std::cout << "=== END SOLVE"  << std::endl;
-        return initial_solution;
-    }
-    std::vector<RectanglePlacement> next_solution =
-        select_next_solution( problem, construct_neighbors(problem));
     problem.set_current_solution(next_solution);
-    return solve(problem,max_steps - 1);
+    return solve(problem, max_steps - 1);
 }
-
 

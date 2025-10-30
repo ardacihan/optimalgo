@@ -1,22 +1,33 @@
 #include "RectangleFittingProblem.h"
 #include <algorithm>
+#include <complex>
 #include <map>
 #include <iostream>
 
 
-int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution)  {
-    int punishment_for_each_box = -100;
-    int reward_for_coverage_max = 100;
+int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution) {
+    auto boxes = group_rectangles_by_bounding_box(solution);
+    int num_boxes = boxes.size();
 
-    int objective = 0;
-    std::unordered_map<int, int> box_coverage = get_coverage_each_bounding_box();
-    objective += punishment_for_each_box * get_num_unique_boxes();
+    int score = -100 * num_boxes;  // Heavy penalty for each box
 
-    for (const std::pair<const int, int>& pair : box_coverage) {
-        objective += (pair.second * pair.second) * 0.01;
+    std::unordered_map<int, int> coverages =  get_coverage_each_bounding_box();
+
+
+    for (const auto& coverage : get_coverage_each_bounding_box()) {
+        if (coverage.second != 0) {
+            //int bonus = (coverage.second / (L * L)) * (coverage.second / (L * L)) ; //Reward higher coverage more
+            score += coverage.second;
+            std::cout << "Coverage bonus " << coverage.second << std::endl;
+
+        }
+
     }
 
-    return objective;
+
+
+
+    return score;
 }
 
 bool RectangleFittingProblem::check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const {

@@ -66,7 +66,8 @@ public:
         return coverage_per_box;
     }
 
-    std::vector<std::vector<RectanglePlacement>> group_rectangles_by_bounding_box(const std::vector<RectanglePlacement>& solution) {
+    std::vector<std::vector<RectanglePlacement>> group_rectangles_by_bounding_box(
+        const std::vector<RectanglePlacement>& solution) {
         std::unordered_map<int, std::vector<RectanglePlacement>> box_groups;
 
         // Group rectangles by their box_id
@@ -81,6 +82,19 @@ public:
         }
 
         return result;
+    }
+
+    std::vector<std::reference_wrapper<const RectanglePlacement>> getPlacementsInSameBoundingBoxRef(int targetBoxId) {
+
+            std::vector<std::reference_wrapper<const RectanglePlacement>> result;
+
+            for (const auto& placement : current_solution) {
+                if (placement.box_id == targetBoxId) {
+                    result.push_back(std::cref(placement));
+                }
+            }
+
+            return result;
     }
 
 };

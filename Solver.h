@@ -25,10 +25,10 @@ public:
 class GeometryBasedNeighborhoodSolver : public NeighborhoodSolver {
 public:
     std::vector<RectanglePlacement> solve(RectangleFittingProblem& problem,int max_steps);
-    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem) override;
 
-    std::vector<Point> find_possible_positions(const std::vector<RectanglePlacement> &bounding_box,
-                                               const RectanglePlacement &rectangle, int grid_step);
+    std::vector<RectanglePlacement> solve_timeboxed(RectangleFittingProblem &problem, double time_limit_seconds);
+
+    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem) override;
 
     std::vector<RectanglePlacement> select_next_solution(
         RectangleFittingProblem &problem, std::vector<std::vector<RectanglePlacement>> neighborhood);
@@ -44,5 +44,7 @@ class GreedySolver : public Solver {
 public:
     std::unique_ptr<Input> solve(OptimizationProblem& problem, const Input& initial_solution);
 };
+
+
 
 #endif // SOLVER_H
