@@ -92,7 +92,7 @@ void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
 
 int main() {
     int L = 15;
-    int num_rectangles = 100; // Smaller for testing
+    int num_rectangles = 1000; // Smaller for testing
     int max_steps = 1000;
     int N = 1; // number of solver runs
     InstanceGenerator instance_generator(L, 1, 10, 1, 10);

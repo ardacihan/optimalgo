@@ -18,7 +18,7 @@
 // also reward them if moving them closer to other  -> this is by choosing the neighbors
 std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
     std::vector<std::vector<RectanglePlacement>> nbs;
-    auto solution = problem.get_current_solution();
+    std::vector<RectanglePlacement> solution = problem.get_current_solution();
     int L = problem.get_box_length();
     int n = solution.size();
 
@@ -28,17 +28,22 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
                r.y + r.get_actual_height() <= L;
     };
 
-    auto collide = [&](const RectanglePlacement& r, int b, int ex) {
+    auto collide_fast = [&](const RectanglePlacement& r, int b, int ex) {
         for (int i = 0; i < n; i++) {
             if (i == ex) continue;
             const auto& o = solution[i];
             if (o.box_id != b) continue;
-            if (r.collides(o)) return true;
+            if (r.x >= o.x + o.get_actual_width() ||
+                r.x + r.get_actual_width() <= o.x ||
+                r.y >= o.y + o.get_actual_height() ||
+                r.y + r.get_actual_height() <= o.y)
+                continue;
+            return true;
         }
         return false;
     };
 
-    auto area = [&](int b) {
+    auto box_area = [&](int b) {
         long long a = 0;
         for (auto& r : solution)
             if (r.box_id == b)
@@ -46,73 +51,56 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
         return a;
     };
 
-    std::set<int> boxes;
-    for (auto& r : solution)
-        boxes.insert(r.box_id);
+    std::unordered_set<int> boxes;
+    for (auto& r : solution) boxes.insert(r.box_id);
 
     std::vector<int> isolated;
     for (int i = 0; i < n; i++) {
         bool touch = false;
-        for (int j = 0; j < n; j++) {
+        for (int j = 0; j < n && !touch; j++) {
             if (i == j) continue;
             if (solution[i].box_id != solution[j].box_id) continue;
-            if (problem.edges_touching(solution[i], solution[j])) {
-                touch = true;
-                break;
-            }
+            if (problem.edges_touching(solution[i], solution[j])) touch = true;
         }
         if (!touch) isolated.push_back(i);
     }
 
-    for (int idx : isolated) {
+    int max_neighbors = std::min((int)isolated.size(), 200); // cap
+    for (int c = 0; c < max_neighbors; ++c) {
+        int idx = isolated[c];
         for (int j = 0; j < n; j++) {
             if (solution[j].box_id == solution[idx].box_id) continue;
             RectanglePlacement moved = solution[idx];
             moved.box_id = solution[j].box_id;
-
-            std::vector<std::pair<int,int>> pos = {
-                {solution[j].x + solution[j].get_actual_width(), solution[j].y},
-                {solution[j].x, solution[j].y + solution[j].get_actual_height()},
-                {solution[j].x, solution[j].y - moved.get_actual_height()}
-            };
-
-            for (auto [nx, ny] : pos) {
-                moved.x = nx;
-                moved.y = ny;
-                if (within(moved) && !collide(moved, moved.box_id, idx)) {
-                    auto nb = solution;
-                    nb[idx] = moved;
-                    nbs.push_back(nb);
-                }
-            }
+            moved.x = solution[j].x;
+            moved.y = solution[j].y + solution[j].get_actual_height();
+            if (!within(moved) || collide_fast(moved, moved.box_id, idx)) continue;
+            auto nb = solution;
+            nb[idx] = moved;
+            nbs.push_back(std::move(nb));
+            if (nbs.size() > 500) return nbs; // early cutoff
         }
     }
 
-    std::vector<std::pair<int, long long>> box_area;
-    for (int b : boxes)
-        box_area.push_back({b, area(b)});
-    std::sort(box_area.begin(), box_area.end(), [](auto& a, auto& b) {
-        return a.second < b.second;
-    });
+    std::vector<std::pair<int, long long>> box_area_vec;
+    box_area_vec.reserve(boxes.size());
+    for (int b : boxes) box_area_vec.push_back({b, box_area(b)});
+    std::sort(box_area_vec.begin(), box_area_vec.end(), [](auto& a, auto& b) { return a.second < b.second; });
+    if (box_area_vec.size() < 2) return nbs;
 
-    if (box_area.size() >= 2) {
-        int from = box_area.front().first;
-        int to = box_area.back().first;
-        std::vector<int> from_rects;
-        for (int i = 0; i < n; i++)
-            if (solution[i].box_id == from)
-                from_rects.push_back(i);
-        for (int idx : from_rects) {
-            RectanglePlacement moved = solution[idx];
-            moved.box_id = to;
-            moved.x = 0;
-            moved.y = 0;
-            if (within(moved) && !collide(moved, moved.box_id, idx)) {
-                auto nb = solution;
-                nb[idx] = moved;
-                nbs.push_back(nb);
-            }
-        }
+    int from = box_area_vec.front().first;
+    int to = box_area_vec.back().first;
+    for (int i = 0; i < n; i++) {
+        if (solution[i].box_id != from) continue;
+        RectanglePlacement moved = solution[i];
+        moved.box_id = to;
+        moved.x = 0;
+        moved.y = 0;
+        if (!within(moved) || collide_fast(moved, moved.box_id, i)) continue;
+        auto nb = solution;
+        nb[i] = moved;
+        nbs.push_back(std::move(nb));
+        if (nbs.size() > 1000) break; // cap for speed
     }
 
     return nbs;
