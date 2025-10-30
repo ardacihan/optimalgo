@@ -25,95 +25,64 @@ GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &pr
     auto bounding_boxes = problem.group_rectangles_by_bounding_box(solution);
     int L = problem.get_box_length();
 
-    std::stack<RectanglePlacement> rectangle_candidates;
+    // Strategy 1: Try to place rectangles in empty spaces below existing rectangles
+    for (auto& rect : solution) {
+        // For each rectangle, try to find empty space below it in the same box
+        auto rectangles_in_same_box = problem.getPlacementsInSameBoundingBoxRef(rect.box_id);
 
-    for (auto rectangles : solution) {
-        int size = rectangles.height * rectangles.width;
+        // Find the bottom-most position in the current column
+        int current_bottom = rect.y + rect.get_actual_height();
 
-        for (auto searched_rectangles : solution) { //for each rectangle, find a bigger rectangle to attach to
-            if (!searched_rectangles.equals(rectangles)) { // another rectangle needed for attachment
-                if (searched_rectangles.box_id != rectangles.box_id) { //we want to attach to another box
-                    if (searched_rectangles.height * searched_rectangles.width > size) {
-                        rectangle_candidates.push(searched_rectangles);
-                    }
+        // Try to place below if there's space
+        if (current_bottom + rect.get_actual_height() <= L) {
+            RectanglePlacement below_placement = rect;
+            below_placement.y = current_bottom;
+
+            // Check if this position is valid (no collisions)
+            bool valid = true;
+            for (const auto& existing : rectangles_in_same_box) {
+                if (below_placement.collides(existing)) {
+                    valid = false;
+                    break;
                 }
             }
-        }
 
-        while (!rectangle_candidates.empty()) {
-            auto r = rectangle_candidates.top();
-
-            // Try to place adjacent to the right first
-            RectanglePlacement right_placement = rectangles;
-            right_placement.box_id = r.box_id;
-            right_placement.x = r.x + r.get_actual_width();
-            right_placement.y = r.y;
-
-            // Try to place on top if right placement doesn't fit
-            RectanglePlacement top_placement = rectangles;
-            top_placement.box_id = r.box_id;
-            top_placement.x = r.x;
-            top_placement.y = r.y + r.get_actual_height();
-
-            auto rectangles_in_the_same_box = problem.getPlacementsInSameBoundingBoxRef(r.box_id);
-
-            // Check if right placement is valid
-            bool right_valid = (right_placement.x + right_placement.get_actual_width() <= L) &&
-                              (right_placement.y + right_placement.get_actual_height() <= L);
-
-            // Check if top placement is valid
-            bool top_valid = (top_placement.x + top_placement.get_actual_width() <= L) &&
-                            (top_placement.y + top_placement.get_actual_height() <= L);
-
-            // Check for collisions with other rectangles in the same bounding box
-            if (right_valid) {
-                bool has_collision = false;
-                for (const auto& existing_rect : rectangles_in_the_same_box) {
-                    if (right_placement.collides(existing_rect)) {
-                        has_collision = true;
+            if (valid) {
+                auto neighbor_solution = solution;
+                for (auto& r : neighbor_solution) {
+                    if (r.equals(rect)) {
+                        r = below_placement;
                         break;
                     }
                 }
-                if (!has_collision) {
-                    // Create neighbor solution with right placement
-                    std::vector<RectanglePlacement> neighbor_solution = solution;
-                    // Replace the original rectangle with the new placement
-                    for (auto& rect : neighbor_solution) {
-                        if (rect.equals(rectangles)) {
-                            rect = right_placement;
-                            break;
-                        }
-                    }
-                    neighborhood.push_back(neighbor_solution);
+                neighborhood.push_back(neighbor_solution);
+            }
+        }
+
+        // Strategy 2: Try to place to the right of existing rectangles
+        int current_right = rect.x + rect.get_actual_width();
+        if (current_right + rect.get_actual_width() <= L) {
+            RectanglePlacement right_placement = rect;
+            right_placement.x = current_right;
+
+            bool valid = true;
+            for (const auto& existing : rectangles_in_same_box) {
+                if (right_placement.collides(existing)) {
+                    valid = false;
+                    break;
                 }
             }
 
-            // If right placement didn't work, try top placement
-            if (!right_valid || neighborhood.empty()) {
-                if (top_valid) {
-                    bool has_collision = false;
-                    for (const auto& existing_rect : rectangles_in_the_same_box) {
-                        if (top_placement.collides(existing_rect)) {
-                            has_collision = true;
-                            break;
-                        }
-                    }
-                    if (!has_collision) {
-                        // Create neighbor solution with top placement
-                        std::vector<RectanglePlacement> neighbor_solution = solution;
-                        // Replace the original rectangle with the new placement
-                        for (auto& rect : neighbor_solution) {
-                            if (rect.equals(rectangles)) {
-                                rect = top_placement;
-                                break;
-                            }
-                        }
-                        neighborhood.push_back(neighbor_solution);
+            if (valid) {
+                auto neighbor_solution = solution;
+                for (auto& r : neighbor_solution) {
+                    if (r.equals(rect)) {
+                        r = right_placement;
+                        break;
                     }
                 }
+                neighborhood.push_back(neighbor_solution);
             }
-
-            rectangle_candidates.pop();
         }
     }
 

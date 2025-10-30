@@ -9,7 +9,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
     auto boxes = group_rectangles_by_bounding_box(solution);
     int num_boxes = boxes.size();
 
-    int score = -100 * num_boxes;  // Heavy penalty for each box
+    int score = -1000 * num_boxes;  // Heavy penalty for each box
 
     std::unordered_map<int, int> coverages =  get_coverage_each_bounding_box();
 
@@ -17,7 +17,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
     for (const auto& coverage : get_coverage_each_bounding_box()) {
         if (coverage.second != 0) {
             //int bonus = (coverage.second / (L * L)) * (coverage.second / (L * L)) ; //Reward higher coverage more
-            score += coverage.second;
+            score += coverage.second * coverage.second;
             std::cout << "Coverage bonus " << coverage.second << std::endl;
 
         }
