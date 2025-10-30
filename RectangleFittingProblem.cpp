@@ -18,7 +18,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
         if (coverage.second != 0) {
             //int bonus = (coverage.second / (L * L)) * (coverage.second / (L * L)) ; //Reward higher coverage more
             score += coverage.second * coverage.second;
-            std::cout << "Coverage bonus " << coverage.second << std::endl;
+            //std::cout << "Coverage bonus " << coverage.second << std::endl;
 
         }
 

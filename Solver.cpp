@@ -5,6 +5,7 @@
 #include "Solver.h"
 #include <vector>
 #include <algorithm>
+#include <iostream>
 #include <stack>
 
 // get each rectangle
@@ -22,65 +23,59 @@ std::vector<std::vector<RectanglePlacement>>
 GeometryBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
     std::vector<std::vector<RectanglePlacement>> neighborhood;
     auto solution = problem.get_current_solution();
-    auto bounding_boxes = problem.group_rectangles_by_bounding_box(solution);
     int L = problem.get_box_length();
 
-    // Strategy 1: Try to place rectangles in empty spaces below existing rectangles
-    for (auto& rect : solution) {
-        // For each rectangle, try to find empty space below it in the same box
-        auto rectangles_in_same_box = problem.getPlacementsInSameBoundingBoxRef(rect.box_id);
+    // Get rectangles grouped by bounding box
+    auto box_groups = problem.group_rectangles_by_bounding_box(solution);
 
-        // Find the bottom-most position in the current column
-        int current_bottom = rect.y + rect.get_actual_height();
+    // For each rectangle, try moving it to each other bounding box
+    for (size_t rect_idx = 0; rect_idx < solution.size(); rect_idx++) {
+        auto& rect = solution[rect_idx];
+        int current_box = rect.box_id;
 
-        // Try to place below if there's space
-        if (current_bottom + rect.get_actual_height() <= L) {
-            RectanglePlacement below_placement = rect;
-            below_placement.y = current_bottom;
+        for (const auto& target_group : box_groups) {
+            if (target_group.empty()) continue;
 
-            // Check if this position is valid (no collisions)
-            bool valid = true;
-            for (const auto& existing : rectangles_in_same_box) {
-                if (below_placement.collides(existing)) {
-                    valid = false;
-                    break;
-                }
-            }
+            int target_box = target_group[0].box_id;
+            if (target_box == current_box) continue;
 
-            if (valid) {
-                auto neighbor_solution = solution;
-                for (auto& r : neighbor_solution) {
-                    if (r.equals(rect)) {
-                        r = below_placement;
+            // Get all rectangles in target box
+            auto target_rects = problem.getPlacementsInSameBoundingBoxRef(target_box);
+
+            // Find bottom-left position for this rectangle in target box
+            bool found_position = false;
+            RectanglePlacement new_placement = rect;
+            new_placement.box_id = target_box;
+
+            // Simple BL: Try along bottom, then move up row by row
+            for (int y = 0; y <= L - new_placement.get_actual_height() && !found_position; y++) {
+                for (int x = 0; x <= L - new_placement.get_actual_width() && !found_position; x++) {
+                    new_placement.x = x;
+                    new_placement.y = y;
+
+                    // Check if position is valid
+                    bool valid = true;
+                    for (const auto& existing : target_rects) {
+                        if (new_placement.collides(existing)) {
+                            valid = false;
+                            break;
+                        }
+                    }
+
+                    // Check within box boundaries
+                    if (valid &&
+                        new_placement.x + new_placement.get_actual_width() <= L &&
+                        new_placement.y + new_placement.get_actual_height() <= L) {
+                        found_position = true;
                         break;
                     }
                 }
-                neighborhood.push_back(neighbor_solution);
-            }
-        }
-
-        // Strategy 2: Try to place to the right of existing rectangles
-        int current_right = rect.x + rect.get_actual_width();
-        if (current_right + rect.get_actual_width() <= L) {
-            RectanglePlacement right_placement = rect;
-            right_placement.x = current_right;
-
-            bool valid = true;
-            for (const auto& existing : rectangles_in_same_box) {
-                if (right_placement.collides(existing)) {
-                    valid = false;
-                    break;
-                }
             }
 
-            if (valid) {
+            // If we found a valid position, create neighbor solution
+            if (found_position) {
                 auto neighbor_solution = solution;
-                for (auto& r : neighbor_solution) {
-                    if (r.equals(rect)) {
-                        r = right_placement;
-                        break;
-                    }
-                }
+                neighbor_solution[rect_idx] = new_placement;
                 neighborhood.push_back(neighbor_solution);
             }
         }
@@ -109,6 +104,7 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
     }
 
     problem.set_current_solution(next_solution);
+    std::cout <<"Taking the next step with obj score: " <<best_obj << std::endl;
     return solve(problem, max_steps - 1);
 }
 
