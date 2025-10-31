@@ -86,6 +86,8 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     auto solution = problem.get_current_solution();
     int L = problem.get_box_length();
     int n = solution.size();
+    const int MAX_NEIGHBORS = 50;
+
 
     if (n == 0) return nbs;
 
@@ -140,14 +142,13 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
 
     // Helper to add a neighbor
     auto add_neighbor = [&](std::vector<RectanglePlacement>& nb) {
-        if (nbs.size() < 2000) {
+        if (nbs.size() < MAX_NEIGHBORS) {
             nbs.push_back(std::move(nb));
             return true;
         }
         return false;
     };
 
-    const int MAX_NEIGHBORS = 2000;
     nbs.reserve(MAX_NEIGHBORS);
 
     // ==== STRATEGY 1: Empty nearly-empty boxes ====
