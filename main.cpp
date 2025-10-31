@@ -1,3 +1,7 @@
+//
+// main.cpp
+//
+
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -6,7 +10,6 @@
 #include "RectanglePlacement.h"
 #include "InstanceGenerator.h"
 #include "OptimizationProblem.h"
-#include "RectangleFittingProblem.h"
 #include <chrono>
 #include "Solver.h"
 
@@ -14,14 +17,11 @@
 void visualizeBox(int box_id, const std::vector<RectanglePlacement>& placements, int L) {
     std::cout << "\nBounding Box " << box_id << " (Size: " << L << "x" << L << "):" << std::endl;
 
-    // Create a grid representation
     std::vector<std::vector<char>> grid(L, std::vector<char>(L, '.'));
 
-    // Map rectangles to characters (A, B, C, ...)
     char current_char = 'A';
     std::map<int, char> rect_chars;
 
-    // Fill the grid with rectangles
     for (const auto& rect : placements) {
         if (rect.box_id != box_id) continue;
 
@@ -42,14 +42,12 @@ void visualizeBox(int box_id, const std::vector<RectanglePlacement>& placements,
         }
     }
 
-    // Print column indices
     std::cout << "   ";
     for (int j = 0; j < L; ++j) {
         std::cout << j % 10;
     }
     std::cout << std::endl;
 
-    // Print the grid with row indices
     for (int i = 0; i < L; ++i) {
         std::cout << i % 10 << "| ";
         for (int j = 0; j < L; ++j) {
@@ -58,7 +56,6 @@ void visualizeBox(int box_id, const std::vector<RectanglePlacement>& placements,
         std::cout << " |" << std::endl;
     }
 
-    // Print rectangle legend
     std::cout << "\nLegend:" << std::endl;
     for (const auto& [key, ch] : rect_chars) {
         int w = key / 1000;
@@ -70,7 +67,6 @@ void visualizeBox(int box_id, const std::vector<RectanglePlacement>& placements,
     }
 }
 
-// Helper function to print detailed rectangle information
 void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
     std::cout << "\nDetailed Rectangle Placements:" << std::endl;
     std::cout << "==============================" << std::endl;
@@ -91,14 +87,15 @@ void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
 }
 
 int main() {
-    int L = 150;
-    int num_rectangles = 100; // Smaller for testing
-    int max_steps = 200;
-    int N = 10; // number of solver runs
-    InstanceGenerator instance_generator(L, 1, 120, 1, 90);
+    int L = 15;
+    int num_rectangles = 1000;
+    int max_steps = 1200;
+    int N = 1; // number of solver runs
+    
+    InstanceGenerator instance_generator(L, 1, 12, 1, 9);
     std::vector<RectanglePlacement> rectangles = instance_generator.generate_rectangles(num_rectangles);
 
-    std::cout << "Initial solution set with " << rectangles.size() << " rectangles" << std::endl;
+    std::cout << "Generated " << rectangles.size() << " random rectangles" << std::endl;
 
     GeometryBasedNeighborhoodSolver solver;
 
@@ -107,7 +104,17 @@ int main() {
     double best_time = 0.0;
 
     for (int run = 1; run <= N; ++run) {
-        RectangleFittingProblem problem(L, rectangles); // fresh copy for each run
+        std::cout << "\n========== Run " << run << " ==========" << std::endl;
+        
+        // Create better initial solution
+        auto rect_copy = rectangles; // Copy for sorting
+        std::vector<RectanglePlacement> initial_solution = 
+            instance_generator.create_better_initial_solution(rect_copy, L);
+        
+        RectangleFittingProblem problem(L, initial_solution);
+        
+        std::cout << "Initial objective: " << problem.objective(initial_solution) << std::endl;
+        
         auto start = std::chrono::steady_clock::now();
         std::vector<RectanglePlacement> solution = solver.solve(problem, max_steps);
         auto end = std::chrono::steady_clock::now();
@@ -115,7 +122,7 @@ int main() {
         int obj = problem.objective(solution);
         std::chrono::duration<double> elapsed_seconds = end - start;
 
-        std::cout << "Run " << run << ": Objective = " << obj
+        std::cout << "Run " << run << ": Final Objective = " << obj
                   << ", Time = " << elapsed_seconds.count() << " s" << std::endl;
 
         if (obj > best_obj) {
@@ -129,31 +136,32 @@ int main() {
     RectangleFittingProblem best_problem(L, best_solution);
     std::unordered_map<int,int> coverage_per_box = best_problem.get_coverage_each_bounding_box();
 
-    std::cout << "\nBest solution coverage per box:" << std::endl;
+    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "BEST SOLUTION SUMMARY" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+    
+    std::cout << "\nCoverage per box:" << std::endl;
     for (const auto& [box_id, coverage] : coverage_per_box) {
         int percentage = (coverage * 100) / (L * L);
         std::cout << "Box " << box_id << ": " << coverage << "/" << (L * L)
                   << " (" << percentage << "%)" << std::endl;
     }
-    std::cout << "Total boxes used: " << coverage_per_box.size() << std::endl;
+    std::cout << "\nTotal boxes used: " << coverage_per_box.size() << std::endl;
     std::cout << "Best objective: " << best_obj << std::endl;
-    std::cout << "Best run time: " << best_time << " seconds." << std::endl;
+    std::cout << "Best run time: " << best_time << " seconds" << std::endl;
 
     // VISUALIZATION SECTION
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "VISUALIZATION OF BEST SOLUTION" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
-    // Group placements by box_id
     std::map<int, std::vector<RectanglePlacement>> boxes;
     for (const auto& rect : best_solution) {
         boxes[rect.box_id].push_back(rect);
     }
 
-    // Print detailed information first
     printRectangleDetails(best_solution);
 
-    // Visualize each bounding box
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "BOX LAYOUT VISUALIZATION" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
@@ -162,7 +170,7 @@ int main() {
         visualizeBox(box_id, placements, L);
     }
 
-    // Print summary statistics
+    // Summary statistics
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "SUMMARY STATISTICS" << std::endl;
     std::cout << std::string(60, '=') << std::endl;

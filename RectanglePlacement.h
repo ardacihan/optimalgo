@@ -1,13 +1,13 @@
+//
+// RectanglePlacement.h
+//
+
 #ifndef RECTANGLEPLACEMENT_H
 #define RECTANGLEPLACEMENT_H
 
-#include "Input.h"
-#include <vector>
-#include <memory>
+#include <algorithm>
 
-
-class RectanglePlacement : public Input {
-public:
+struct RectanglePlacement {
     int width;
     int height;
     int x;
@@ -15,65 +15,37 @@ public:
     bool rotated;
     int box_id;
 
-    // Constructor
-    RectanglePlacement(int w = 0, int h = 0, int x_pos = 0, int y_pos = 0,
-                      bool rot = false, int bid = -1)
-        : width(w), height(h), x(x_pos), y(y_pos), rotated(rot), box_id(bid) {}
+    RectanglePlacement(int w, int h, int x_pos, int y_pos, bool rot, int box)
+        : width(w), height(h), x(x_pos), y(y_pos), rotated(rot), box_id(box) {}
 
-    // Get actual width considering rotation
     int get_actual_width() const {
         return rotated ? height : width;
     }
 
-    // Get actual height considering rotation
     int get_actual_height() const {
         return rotated ? width : height;
     }
 
-    void rotate() { this->rotated = !this->rotated; }
-
-    bool equals(RectanglePlacement h) {
-        return h.height == this->height && h.width == this->width &&  h.rotated == rotated &&  h.box_id == box_id;
-    }
-
     bool collides(const RectanglePlacement& other) const {
-        // Get the actual dimensions considering rotation
-        int this_width = get_actual_width();
-        int this_height = get_actual_height();
-        int other_width = other.get_actual_width();
-        int other_height = other.get_actual_height();
+        int w1 = get_actual_width();
+        int h1 = get_actual_height();
+        int w2 = other.get_actual_width();
+        int h2 = other.get_actual_height();
 
-        // Check if rectangles don't overlap (no collision)
-        if (x + this_width <= other.x ||  // This is to the left of other
-            other.x + other_width <= x ||  // Other is to the left of this
-            y + this_height <= other.y ||  // This is above other
-            other.y + other_height <= y) { // Other is above this
-            return false; // No collision
-            }
-
-        return true; // Collision detected
+        return !(x + w1 <= other.x || other.x + w2 <= x ||
+                 y + h1 <= other.y || other.y + h2 <= y);
     }
 
-    int getOverlapArea(const RectanglePlacement& other) const {
-        if (!collides(other)) {
-            return 0;
-        }
+    long long getOverlapArea(const RectanglePlacement& other) const {
+        int w1 = get_actual_width();
+        int h1 = get_actual_height();
+        int w2 = other.get_actual_width();
+        int h2 = other.get_actual_height();
 
-        int this_width = get_actual_width();
-        int this_height = get_actual_height();
-        int other_width = other.get_actual_width();
-        int other_height = other.get_actual_height();
+        int x_overlap = std::max(0, std::min(x + w1, other.x + w2) - std::max(x, other.x));
+        int y_overlap = std::max(0, std::min(y + h1, other.y + h2) - std::max(y, other.y));
 
-        // Calculate overlap rectangle
-        int overlap_left = std::max(x, other.x);
-        int overlap_right = std::min(x + this_width, other.x + other_width);
-        int overlap_top = std::max(y, other.y);
-        int overlap_bottom = std::min(y + this_height, other.y + other_height);
-
-        int overlap_width = overlap_right - overlap_left;
-        int overlap_height = overlap_bottom - overlap_top;
-
-        return overlap_width * overlap_height;
+        return (long long)x_overlap * y_overlap;
     }
 };
 
