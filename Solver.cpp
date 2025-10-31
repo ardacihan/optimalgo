@@ -1,5 +1,5 @@
 //
-// Solver.cpp
+// Created by ardac on 28/10/2025.
 //
 
 #include "Solver.h"
@@ -102,7 +102,9 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
         int box_id = solution[i].box_id;
         auto it = box_data.find(box_id);
         if (it == box_data.end()) {
-            box_data.insert({box_id, BoxData(L, avg_size)});
+            box_data.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(box_id),
+                            std::forward_as_tuple(L, avg_size));
             it = box_data.find(box_id);
         }
         it->second.rect_indices.push_back(i);
@@ -162,7 +164,7 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     for (const auto& [sparse_box_id, _] : sparse_boxes) {
         if (nbs.size() >= MAX_NEIGHBORS) break;
 
-        const auto& sparse_data = box_data[sparse_box_id];
+        const auto& sparse_data = box_data.at(sparse_box_id);
 
         for (int idx : sparse_data.rect_indices) {
             const auto& rect = solution[idx];
@@ -303,8 +305,8 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
                 int box_a = box_ids[i];
                 int box_b = box_ids[j];
 
-                const auto& data_a = box_data[box_a];
-                const auto& data_b = box_data[box_b];
+                const auto& data_a = box_data.at(box_a);
+                const auto& data_b = box_data.at(box_b);
 
                 if (!data_a.rect_indices.empty() && !data_b.rect_indices.empty()) {
                     int idx_a = data_a.rect_indices[0];
@@ -343,7 +345,6 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
 
 // ============== Solver Implementation ==============
 
-// Modified solver to use incremental calculation
 std::vector<RectanglePlacement>
 GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max_steps) {
     std::vector<RectanglePlacement> solution = problem.get_current_solution();
@@ -357,31 +358,11 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
 
     int current_obj = problem.objective(solution);
 
-    // Find which rectangle changed in each neighbor (for incremental eval)
     std::vector<RectanglePlacement> best_neighbor = solution;
     int best_obj = current_obj;
 
     for (auto &n : neighbors) {
-        // Find changed rectangle
-        int changed_idx = -1;
-        for (size_t i = 0; i < n.size(); i++) {
-            if (n[i].box_id != solution[i].box_id ||
-                n[i].x != solution[i].x ||
-                n[i].y != solution[i].y ||
-                n[i].rotated != solution[i].rotated) {
-                changed_idx = i;
-                break;
-                }
-        }
-
-        // Use incremental calculation if possible
-        int obj;
-        if (changed_idx != -1) {
-            obj = problem.objective_incremental(solution, n, changed_idx, current_obj);
-        } else {
-            obj = problem.objective(n);
-        }
-
+        int obj = problem.objective(n);
         if (obj > best_obj) {
             best_obj = obj;
             best_neighbor = n;
@@ -390,11 +371,13 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
 
     if (best_obj > current_obj) {
         problem.set_current_solution(best_neighbor);
-        std::cout << "Step " << (max_steps) << ": Improved from " << current_obj
-                  << " to " << best_obj << " (Δ=" << (best_obj - current_obj) << ")" << std::endl;
+        std::cout << "Step " << (1201 - max_steps) << ": Improved from " << current_obj
+                  << " to " << best_obj << " (Δ=" << (best_obj - current_obj)
+                  << ", checked " << neighbors.size() << " neighbors)" << std::endl;
         return solve(problem, max_steps - 1);
     } else {
-        std::cout << "No improvement found, stopping." << std::endl;
+        std::cout << "No improvement found (current: " << current_obj
+                  << ", best neighbor: " << best_obj << "), stopping early." << std::endl;
         return solution;
     }
 }

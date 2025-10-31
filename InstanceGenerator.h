@@ -1,7 +1,3 @@
-//
-// InstanceGenerator.h
-//
-
 #ifndef INSTANCEGENERATOR_H
 #define INSTANCEGENERATOR_H
 
@@ -25,4 +21,4 @@ public:
         std::vector<RectanglePlacement>& rectangles, int box_length);
 };
 
-#endif // INSTANCEGENERATOR_H
+#endif

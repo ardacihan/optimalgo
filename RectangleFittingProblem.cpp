@@ -1,7 +1,3 @@
-//
-// RectangleFittingProblem.cpp
-//
-
 #include "RectangleFittingProblem.h"
 #include <algorithm>
 #include <complex>
@@ -15,12 +11,10 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     const int SPARSE_BOX_PENALTY = 50'000;
     const int FRAGMENTATION_PENALTY = 100;
 
-    // Count unique boxes
     std::unordered_set<int> boxes;
     for (auto& r : current_solution) boxes.insert(r.box_id);
     int num_boxes = boxes.size();
 
-    // Calculate overlaps and touch bonuses
     long long overlap = 0, touch_bonus = 0;
     for (size_t i = 0; i < current_solution.size(); ++i) {
         for (size_t j = i + 1; j < current_solution.size(); ++j) {
@@ -30,7 +24,6 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         }
     }
 
-    // Calculate coverage per box and unused space
     std::unordered_map<int, long long> cov;
     std::unordered_map<int, int> rect_count;
     long long unused = 0;
@@ -41,25 +34,21 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         rect_count[r.box_id]++;
     }
     
-    // Heavily penalize boxes with low utilization
     long long sparse_penalty = 0;
     for (int b : boxes) {
         long long box_area = 1LL * L * L;
         long long used_area = cov[b];
         unused += (box_area - used_area);
         
-        // If box uses less than 30% of space, penalize heavily
         if (used_area * 100 < box_area * 30) {
             sparse_penalty += SPARSE_BOX_PENALTY;
         }
         
-        // Extra penalty for boxes with very few rectangles
         if (rect_count[b] <= 2) {
             sparse_penalty += SPARSE_BOX_PENALTY / 2;
         }
     }
 
-    // Fragmentation metric - penalize scattered rectangles
     long long fragmentation = 0;
     for (const auto& [box_id, rects_in_box] : rect_count) {
         if (rects_in_box == 0) continue;
@@ -81,7 +70,6 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         }
     }
 
-    // Build final score
     long long score = -(long long)num_boxes * BIG;
     score -= overlap * PENALTY;
     score -= unused / 100;
@@ -143,5 +131,3 @@ bool RectangleFittingProblem::edges_touching(const RectanglePlacement& r1, const
 
     return vertical || horizontal;
 }
-
-

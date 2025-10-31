@@ -1,7 +1,3 @@
-//
-// main.cpp
-//
-
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -13,7 +9,6 @@
 #include <chrono>
 #include "Solver.h"
 
-// Helper function to visualize a single bounding box
 void visualizeBox(int box_id, const std::vector<RectanglePlacement>& placements, int L) {
     std::cout << "\nBounding Box " << box_id << " (Size: " << L << "x" << L << "):" << std::endl;
 
@@ -88,12 +83,13 @@ void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
 
 int main() {
     int L = 15;
-    int num_rectangles = 1000;
+    int num_rectangles = 300;
     int max_steps = 1200;
-    int N = 1; // number of solver runs
-    
-    InstanceGenerator instance_generator(L, 1, 12, 1, 9);
+    int N = 1;
+
+    InstanceGenerator instance_generator(L, 1, 15, 1, 15);
     std::vector<RectanglePlacement> rectangles = instance_generator.generate_rectangles(num_rectangles);
+    rectangles = instance_generator.create_better_initial_solution(rectangles,L);
 
     std::cout << "Generated " << rectangles.size() << " random rectangles" << std::endl;
 
@@ -105,16 +101,15 @@ int main() {
 
     for (int run = 1; run <= N; ++run) {
         std::cout << "\n========== Run " << run << " ==========" << std::endl;
-        
-        // Create better initial solution
-        auto rect_copy = rectangles; // Copy for sorting
-        std::vector<RectanglePlacement> initial_solution = 
+
+        auto rect_copy = rectangles;
+        std::vector<RectanglePlacement> initial_solution =
             instance_generator.create_better_initial_solution(rect_copy, L);
-        
+
         RectangleFittingProblem problem(L, initial_solution);
-        
+
         std::cout << "Initial objective: " << problem.objective(initial_solution) << std::endl;
-        
+
         auto start = std::chrono::steady_clock::now();
         std::vector<RectanglePlacement> solution = solver.solve(problem, max_steps);
         auto end = std::chrono::steady_clock::now();
@@ -132,14 +127,13 @@ int main() {
         }
     }
 
-    // Print coverage per box for the best solution
     RectangleFittingProblem best_problem(L, best_solution);
     std::unordered_map<int,int> coverage_per_box = best_problem.get_coverage_each_bounding_box();
 
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "BEST SOLUTION SUMMARY" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
-    
+
     std::cout << "\nCoverage per box:" << std::endl;
     for (const auto& [box_id, coverage] : coverage_per_box) {
         int percentage = (coverage * 100) / (L * L);
@@ -150,7 +144,6 @@ int main() {
     std::cout << "Best objective: " << best_obj << std::endl;
     std::cout << "Best run time: " << best_time << " seconds" << std::endl;
 
-    // VISUALIZATION SECTION
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "VISUALIZATION OF BEST SOLUTION" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
@@ -170,7 +163,6 @@ int main() {
         visualizeBox(box_id, placements, L);
     }
 
-    // Summary statistics
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "SUMMARY STATISTICS" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
