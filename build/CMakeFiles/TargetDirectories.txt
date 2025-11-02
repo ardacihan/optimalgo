@@ -1,0 +1,4 @@
+/home/arda/CLionProjects/optimalgo/build/CMakeFiles/imgui.dir
+/home/arda/CLionProjects/optimalgo/build/CMakeFiles/optimalgo.dir
+/home/arda/CLionProjects/optimalgo/build/CMakeFiles/edit_cache.dir
+/home/arda/CLionProjects/optimalgo/build/CMakeFiles/rebuild_cache.dir

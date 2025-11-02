@@ -48,8 +48,9 @@ add_executable(optimalgo
         Solver.cpp
 
         # Visualization files
-        src/visualizer.cpp
-        src/main_vis.cpp
+        visualizer.cpp
+        main_vis.cpp
+        SolverVisualizer.h
 )
 
 # Include directories
