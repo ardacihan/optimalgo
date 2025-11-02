@@ -81,9 +81,9 @@ void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
     }
 }
 
-int main() {
+int main2() {
     int L = 15;
-    int num_rectangles = 100;
+    int num_rectangles = 1000;
     int max_steps = 800;
     int N = 1;
 

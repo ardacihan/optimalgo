@@ -3,6 +3,7 @@
 #include <complex>
 #include <map>
 #include <iostream>
+#include <climits>
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
     const int BIG = 1'000'000;
