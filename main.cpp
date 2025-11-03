@@ -83,11 +83,11 @@ void printRectangleDetails(const std::vector<RectanglePlacement>& placements) {
 
 int main2() {
     int L = 15;
-    int num_rectangles = 100;
-    int max_steps = 800;
+    int num_rectangles = 1000;
+    int max_steps = 8000;
     int N = 1;
 
-    InstanceGenerator instance_generator(L, 1, 15, 1, 15);
+    InstanceGenerator instance_generator(L, 4, 15, 4, 15);
     std::vector<RectanglePlacement> rectangles = instance_generator.generate_rectangles(num_rectangles);
     rectangles = instance_generator.create_better_initial_solution(rectangles,L);
 

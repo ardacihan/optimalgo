@@ -3,22 +3,23 @@
 #include <algorithm>
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
-    : box_length(100), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false) {
+    : box_length(100), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
+      instance_generator(
+          gui_config.box_size,
+          gui_config.min_width,
+          gui_config.max_width,
+          gui_config.min_height,
+          gui_config.max_height
+      ),
+      problem(gui_config.box_size, std::vector<RectanglePlacement>()) {
+
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return;
     }
 
-    instance_generator =  InstanceGenerator(
-        gui_config.box_size,
-        gui_config.min_width,
-        gui_config.max_width,
-        gui_config.min_height,
-        gui_config.max_height);
-
-    current_placements = instance_generator.generate_rectangles(10);
-
-    problem = RectangleFittingProblem(gui_config.box_size, current_placements);
+    // Generate random problem at startup
+    generateRandomProblem();
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -69,7 +70,7 @@ bool RectangleVisualizer::initialize() {
     }
 
     if (!ImGui_ImplOpenGL3_Init("#version 330")) {
-        std::cerr << "Failed to initialize ImGui OpenGL backend" << std::endl;  // Fixed the error here
+        std::cerr << "Failed to initialize ImGui OpenGL backend" << std::endl;
         return false;
     }
 
@@ -121,21 +122,23 @@ void RectangleVisualizer::generateInstance() {
         gui_config.max_height
     );
 
-    current_placements = instance_generator.generate_rectangles(gui_config.rect_count) ;
-    problem = RectangleFittingProblem(
-        gui_config.box_size,current_placements);
-
-    // Generate rectangles using your method
-    //auto placements = instance_generator->generate_rectangles(gui_config.rect_count);
-
-    // Use better initialization from InstanceGenerator
-   // auto better_placements = instance_generator->create_better_initial_solution(placements, gui_config.box_size);
+    current_placements = instance_generator.generate_rectangles(gui_config.rect_count);
+    problem = RectangleFittingProblem(gui_config.box_size, current_placements);
 
     setPlacements(problem.get_current_solution());
     setBoxLength(gui_config.box_size);
 }
 
+void RectangleVisualizer::generateRandomProblem() {
+    generateInstance();
+}
+
 void RectangleVisualizer::runSolver() {
+    solver.solve(problem, gui_config.max_solver_steps);
+    current_placements = problem.get_current_solution();
+}
+
+void RectangleVisualizer::solveNextStep() {
     solver.solve_one_step(problem);
     current_placements = problem.get_current_solution();
 }
@@ -159,37 +162,38 @@ void RectangleVisualizer::render() {
 
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
 
-    // Use current placements (solver visualization temporarily disabled)
+    // Use current placements
     std::vector<RectanglePlacement> display_placements = current_placements;
 
-    // Calculate number of boxes needed
-    int num_boxes = 1;
-    if (!display_placements.empty()) {
-        int max_box_id = 0;
-        for (const auto& placement : display_placements) {
-            if (placement.box_id > max_box_id) max_box_id = placement.box_id;
-        }
-        num_boxes = max_box_id + 1;
+    // Calculate which boxes actually have rectangles (no empty boxes)
+    std::unordered_set<int> used_boxes;
+    for (const auto& placement : display_placements) {
+        used_boxes.insert(placement.box_id);
     }
+
+    // Convert to sorted vector for consistent display order
+    std::vector<int> non_empty_boxes(used_boxes.begin(), used_boxes.end());
+    std::sort(non_empty_boxes.begin(), non_empty_boxes.end());
+
+    int num_non_empty_boxes = non_empty_boxes.size();
 
     // Determine which boxes to display
     std::vector<int> boxes_to_display;
     if (gui_config.view_all_boxes) {
-        // Display all boxes
-        for (int i = 0; i < num_boxes; ++i) {
-            boxes_to_display.push_back(i);
-        }
+        // Display only non-empty boxes
+        boxes_to_display = non_empty_boxes;
     } else {
-        // Display only the selected box
-        if (gui_config.current_box_view < num_boxes) {
-            boxes_to_display.push_back(gui_config.current_box_view);
-        } else if (num_boxes > 0) {
-            gui_config.current_box_view = 0;
-            boxes_to_display.push_back(0);
+        // Display only the selected box if it's not empty
+        if (!non_empty_boxes.empty()) {
+            // Ensure current_box_view is within valid range
+            if (gui_config.current_box_view >= non_empty_boxes.size()) {
+                gui_config.current_box_view = 0;
+            }
+            boxes_to_display.push_back(non_empty_boxes[gui_config.current_box_view]);
         }
     }
 
-    // Draw bounding boxes
+    // Draw bounding boxes only for boxes that have rectangles
     float box_spacing = 20.0f;
     int boxes_count = boxes_to_display.size();
     float total_width = boxes_count * (box_length * scale_factor) + (boxes_count - 1) * box_spacing;
@@ -238,8 +242,12 @@ void RectangleVisualizer::render() {
 
     for (const auto& placement : display_placements) {
         // Skip if we're viewing a specific box and this rectangle isn't in it
-        if (!gui_config.view_all_boxes && placement.box_id != gui_config.current_box_view) {
-            continue;
+        if (!gui_config.view_all_boxes) {
+            // Find the current box we're viewing
+            int current_box = boxes_to_display.empty() ? -1 : boxes_to_display[0];
+            if (placement.box_id != current_box) {
+                continue;
+            }
         }
 
         // Find the display index for this box
@@ -324,15 +332,23 @@ void RectangleVisualizer::render() {
     ImGui::Text("Box Viewing:");
     ImGui::Checkbox("View All Boxes", &gui_config.view_all_boxes);
 
-    if (!gui_config.view_all_boxes && num_boxes > 0) {
-        ImGui::SliderInt("View Box", &gui_config.current_box_view, 0, num_boxes - 1);
-        ImGui::Text("Viewing Box %d of %d", gui_config.current_box_view + 1, num_boxes);
+    if (!gui_config.view_all_boxes && num_non_empty_boxes > 0) {
+        // Update current_box_view to be within valid range
+        if (gui_config.current_box_view >= num_non_empty_boxes) {
+            gui_config.current_box_view = 0;
+        }
+
+        ImGui::SliderInt("View Box", &gui_config.current_box_view, 0, num_non_empty_boxes - 1);
+        ImGui::Text("Viewing Box %d of %d", gui_config.current_box_view + 1, num_non_empty_boxes);
+    } else if (!gui_config.view_all_boxes && num_non_empty_boxes == 0) {
+        ImGui::Text("No boxes with rectangles to display");
     }
 
     ImGui::Separator();
 
-    if (ImGui::Button("Generate (Better Init)")) {
-        generateInstance();
+    // Action buttons
+    if (ImGui::Button("Generate Random Problem")) {
+        generateRandomProblem();
     }
 
     ImGui::SameLine();
@@ -340,41 +356,51 @@ void RectangleVisualizer::render() {
         current_placements.clear();
         gui_config.current_box_view = 0;
         gui_config.show_solver_steps = false;
+        // Reset problem with empty solution
+        problem = RectangleFittingProblem(gui_config.box_size, std::vector<RectanglePlacement>());
     }
 
     ImGui::Separator();
 
-    // Temporarily disable solver controls
-    ImGui::Text("Solver Controls: (Coming Soon)");
-    //ImGui::BeginDisabled(); // Disable solver controls for now
+    // Solver controls
+    ImGui::Text("Solver Controls:");
     ImGui::SliderInt("Max Solver Steps", &gui_config.max_solver_steps, 1, 200);
     ImGui::Checkbox("Show Solver Steps", &gui_config.show_solver_steps);
+
+    // NEW: Solve Next Step button
+    if (ImGui::Button("Solve Next Step")) {
+        solveNextStep();
+    }
+
+    ImGui::SameLine();
 
     if (ImGui::Button("Run Solver")) {
         runSolver();
     }
-    //ImGui::EndDisabled();
 
     ImGui::Separator();
     ImGui::Text("Statistics:");
     ImGui::Text("Rectangles: %zu", display_placements.size());
-    ImGui::Text("Boxes Used: %d", num_boxes);
+    ImGui::Text("Boxes Used: %d", num_non_empty_boxes);
 
     // Calculate utilization for current view
-    if (num_boxes > 0) {
+    if (num_non_empty_boxes > 0) {
         float total_area;
         float used_area = 0;
 
         if (gui_config.view_all_boxes) {
-            total_area = num_boxes * box_length * box_length;
+            total_area = num_non_empty_boxes * box_length * box_length;
             for (const auto& placement : display_placements) {
                 used_area += placement.width * placement.height;
             }
         } else {
-            total_area = box_length * box_length;
-            for (const auto& placement : display_placements) {
-                if (placement.box_id == gui_config.current_box_view) {
-                    used_area += placement.width * placement.height;
+            if (!boxes_to_display.empty()) {
+                int current_box = boxes_to_display[0];
+                total_area = box_length * box_length;
+                for (const auto& placement : display_placements) {
+                    if (placement.box_id == current_box) {
+                        used_area += placement.width * placement.height;
+                    }
                 }
             }
         }

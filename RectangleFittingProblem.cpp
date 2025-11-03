@@ -5,7 +5,7 @@
 #include <iostream>
 #include <climits>
 
-int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
+int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement>& current_solution) {
     const int BIG = 1'000'000;
     const int PENALTY = 10'000;
     const int TOUCH_BONUS = 500;
@@ -85,7 +85,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 
 
 
-int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement>& current_solution) {
+int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
     const int box_cost = -1000;
     const int coverage_reward = 1000;
     const int scaling_per_box_reward = 2;
