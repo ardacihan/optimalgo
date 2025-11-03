@@ -92,9 +92,13 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
         MAX_NEIGHBORS = 50;
     }
     else if (n  > 600) {
-        MAX_NEIGHBORS = 300;
+        MAX_NEIGHBORS = 100;
     } else if (n > 400) {
-        MAX_NEIGHBORS = 600;
+        MAX_NEIGHBORS = 200;
+    } else if (n > 300) {
+        MAX_NEIGHBORS = 400;
+    } else if (n > 200) {
+        MAX_NEIGHBORS = 800;
     }
 
 

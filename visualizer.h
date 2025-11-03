@@ -21,7 +21,7 @@ struct GUIConfig {
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
-    int max_solver_steps = 100;
+    int max_solver_steps = 2000;
 };
 
 class RectangleVisualizer {
