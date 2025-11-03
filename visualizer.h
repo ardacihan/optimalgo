@@ -11,6 +11,7 @@
 #include "imgui_impl_opengl3.h"
 #include "InstanceGenerator.h"
 #include "RectanglePlacement.h"
+#include "Solver.h"
 // Remove SolverVisualizer for now since it's causing issues
 // #include "SolverVisualizer.h"
 // #include "RectangleFittingProblem.h"
@@ -19,6 +20,7 @@ class RectangleVisualizer {
 public:
     RectangleVisualizer(int width, int height);
     ~RectangleVisualizer();
+
 
     bool initialize();
     void pollEvents();
@@ -40,8 +42,8 @@ private:
     struct { float x, y; } offset;
     bool initialized;
 
-    std::vector<RectanglePlacement> current_placements;
-    std::unique_ptr<InstanceGenerator> instance_generator;
+
+
     // Comment out solver_visualizer for now
     // std::unique_ptr<SolverVisualizer> solver_visualizer;
     // std::unique_ptr<RectangleFittingProblem> problem;
@@ -62,6 +64,19 @@ private:
         int current_solver_step = 0;
         bool show_solver_steps = false;
     } gui_config;
+
+
+
+    InstanceGenerator instance_generator =  InstanceGenerator(
+        gui_config.box_size,
+        gui_config.min_width,
+        gui_config.max_width,
+        gui_config.min_height,
+        gui_config.max_height);
+    std::vector<RectanglePlacement> current_placements = instance_generator.generate_rectangles(gui_config.rect_count);
+
+    RectangleFittingProblem problem = RectangleFittingProblem(gui_config.rect_count,current_placements);
+    GeometryBasedNeighborhoodSolver solver;
 };
 
 #endif

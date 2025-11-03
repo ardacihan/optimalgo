@@ -11,7 +11,9 @@
 class GeometryBasedNeighborhoodSolver {
 public:
     std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int max_steps);
-    
+
+    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem);
+
 private:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 };

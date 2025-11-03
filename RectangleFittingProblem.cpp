@@ -83,6 +83,37 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     return (int)score;
 }
 
+
+
+int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement>& current_solution) {
+    const int box_cost = -1000;
+    const int coverage_reward = 1000;
+    const int scaling_per_box_reward = 2;
+
+    int score = 0;
+
+    std::unordered_set<int> boxes;
+    std::unordered_map<int, int> box_rect_count;
+
+    for (auto& r : current_solution) {
+        boxes.insert(r.box_id);
+        box_rect_count[r.box_id]++;
+    }
+
+    score += box_cost * boxes.size();
+
+    for (auto& box_pair : box_rect_count) {
+        int count = box_pair.second;
+        score += count * count * scaling_per_box_reward;
+    }
+
+    if (score > INT_MAX) return INT_MAX;
+    if (score < INT_MIN) return INT_MIN;
+    return score;
+}
+
+
+
 bool RectangleFittingProblem::check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const {
     for (size_t i = 0; i < current_solution.size(); ++i) {
         for (size_t j = i + 1; j < current_solution.size(); ++j) {

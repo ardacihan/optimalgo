@@ -4,19 +4,29 @@
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
     : box_length(100), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false) {
-
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return;
     }
 
+    instance_generator =  InstanceGenerator(
+        gui_config.box_size,
+        gui_config.min_width,
+        gui_config.max_width,
+        gui_config.min_height,
+        gui_config.max_height);
+
+    current_placements = instance_generator.generate_rectangles(10);
+
+    problem = RectangleFittingProblem(gui_config.box_size, current_placements);
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    #ifdef __APPLE__
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    #endif
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
 
     window = glfwCreateWindow(width, height, "Rectangle Packing Visualization", nullptr, nullptr);
     if (!window) {
@@ -25,7 +35,7 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
         return;
     }
 
-    glfwMakeContextCurrent(static_cast<GLFWwindow*>(window));
+    glfwMakeContextCurrent(static_cast<GLFWwindow *>(window));
     glfwSwapInterval(1);
 }
 
@@ -103,7 +113,7 @@ void RectangleVisualizer::updateMaxSizeLimits() {
 
 void RectangleVisualizer::generateInstance() {
     // Create InstanceGenerator with GUI parameters
-    instance_generator = std::make_unique<InstanceGenerator>(
+    instance_generator = InstanceGenerator(
         gui_config.box_size,
         gui_config.min_width,
         gui_config.max_width,
@@ -111,22 +121,23 @@ void RectangleVisualizer::generateInstance() {
         gui_config.max_height
     );
 
+    current_placements = instance_generator.generate_rectangles(gui_config.rect_count) ;
+    problem = RectangleFittingProblem(
+        gui_config.box_size,current_placements);
+
     // Generate rectangles using your method
-    auto placements = instance_generator->generate_rectangles(gui_config.rect_count);
+    //auto placements = instance_generator->generate_rectangles(gui_config.rect_count);
 
     // Use better initialization from InstanceGenerator
-    auto better_placements = instance_generator->create_better_initial_solution(placements, gui_config.box_size);
+   // auto better_placements = instance_generator->create_better_initial_solution(placements, gui_config.box_size);
 
-    setPlacements(better_placements);
+    setPlacements(problem.get_current_solution());
     setBoxLength(gui_config.box_size);
 }
 
 void RectangleVisualizer::runSolver() {
-    // Temporarily disable solver functionality until we fix the dependencies
-    std::cout << "Solver functionality is temporarily disabled. Working on instance generation first." << std::endl;
-
-    // For now, just regenerate the instance
-    generateInstance();
+    solver.solve_one_step(problem);
+    current_placements = problem.get_current_solution();
 }
 
 void RectangleVisualizer::pollEvents() {
@@ -335,14 +346,14 @@ void RectangleVisualizer::render() {
 
     // Temporarily disable solver controls
     ImGui::Text("Solver Controls: (Coming Soon)");
-    ImGui::BeginDisabled(); // Disable solver controls for now
+    //ImGui::BeginDisabled(); // Disable solver controls for now
     ImGui::SliderInt("Max Solver Steps", &gui_config.max_solver_steps, 1, 200);
     ImGui::Checkbox("Show Solver Steps", &gui_config.show_solver_steps);
 
     if (ImGui::Button("Run Solver")) {
         runSolver();
     }
-    ImGui::EndDisabled();
+    //ImGui::EndDisabled();
 
     ImGui::Separator();
     ImGui::Text("Statistics:");

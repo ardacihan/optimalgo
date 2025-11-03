@@ -86,7 +86,16 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     auto solution = problem.get_current_solution();
     int L = problem.get_box_length();
     int n = solution.size();
-    const int MAX_NEIGHBORS = 50;
+    int MAX_NEIGHBORS = 1000;
+
+    if (n > 800) {
+        MAX_NEIGHBORS = 50;
+    }
+    else if (n  > 600) {
+        MAX_NEIGHBORS = 300;
+    } else if (n > 400) {
+        MAX_NEIGHBORS = 600;
+    }
 
 
     if (n == 0) return nbs;
@@ -381,4 +390,33 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
                   << ", best neighbor: " << best_obj << "), stopping early." << std::endl;
         return solution;
     }
+}
+
+
+std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem) {
+    std::vector<RectanglePlacement> solution = problem.get_current_solution();
+
+
+
+    auto neighbors = construct_neighbors(problem);
+    if (neighbors.empty()) {
+        std::cout << "No neighbors generated, stopping." << std::endl;
+        return solution;
+    }
+
+    int current_obj = problem.objective(solution);
+
+    std::vector<RectanglePlacement> best_neighbor = solution;
+    int best_obj = current_obj;
+
+    for (auto &n : neighbors) {
+        int obj = problem.objective(n);
+        if (obj > best_obj) {
+            best_obj = obj;
+            best_neighbor = n;
+        }
+    }
+
+    problem.set_current_solution(best_neighbor);
+    return best_neighbor;
 }

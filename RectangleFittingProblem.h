@@ -24,7 +24,9 @@ public:
         : L(L), current_solution(initial_solution) {}
 
     int objective(const std::vector<RectanglePlacement>& current_solution) override;
-    
+
+    int objective2(const std::vector<RectanglePlacement> &current_solution);
+
     bool solution_legal(const std::vector<RectanglePlacement>& current_solution) const override;
 
     std::vector<RectanglePlacement> get_current_solution() const override {
