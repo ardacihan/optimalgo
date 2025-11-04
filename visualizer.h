@@ -31,6 +31,7 @@ private:
     float scale_factor;
     ImVec2 offset;
     bool initialized;
+    bool is_solving;
 
     GUIConfig gui_config;
     InstanceGenerator instance_generator;
