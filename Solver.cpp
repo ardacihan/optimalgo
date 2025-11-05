@@ -85,7 +85,6 @@ struct BoxData {
     BoxData& operator=(const BoxData&) = delete;
 };
 
-// ============== 3. Geometry-Based Neighborhood Construction (Optimized) ==============
 
 // Helper to quickly build the occupancy grid for a specific box.
 void build_box_occupancy(BoxData& data, const std::vector<RectanglePlacement>& solution) {
