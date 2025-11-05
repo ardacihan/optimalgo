@@ -249,7 +249,7 @@ void RectangleVisualizer::render() {
     ImGui::Text("Instance Generator Parameters");
     ImGui::Separator();
     ImGui::SliderInt("Rectangle Count",&gui_config.rect_count,1,1000);
-    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,50);
+    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,20);
     if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
     ImGui::SliderInt("Min Width",&gui_config.min_width,1,box_length);
     ImGui::SliderInt("Max Width",&gui_config.max_width,gui_config.min_width,box_length);

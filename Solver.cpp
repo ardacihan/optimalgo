@@ -323,7 +323,7 @@ GeometryBasedNeighborhoodSolver::solve_with_reruns(RectangleFittingProblem &prob
             auto coverage = problem.get_coverage_each_bounding_box();
             std::vector<RectanglePlacement> remaining_solution;
             int total_box_area = L * L;
-            int threshold = total_box_area * 0.8;
+            int threshold = total_box_area * 0.7;
 
             // Filter out rectangles in boxes that are NOT filled
             for (const auto& placement : merged) {
