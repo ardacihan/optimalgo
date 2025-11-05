@@ -13,11 +13,11 @@
 
 struct GUIConfig {
     int rect_count = 10;
-    int box_size = 100;
+    int box_size = 15;
     int min_width = 5;
-    int max_width = 30;
+    int max_width = 8;
     int min_height = 5;
-    int max_height = 30;
+    int max_height = 8;
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;

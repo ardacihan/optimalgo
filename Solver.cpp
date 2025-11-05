@@ -117,21 +117,12 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     auto solution = problem.get_current_solution();
     int L = problem.get_box_length();
     int n = solution.size();
-
-    // Adjust MAX_NEIGHBORS severely for high rectangle counts to stay within time limit
-    int MAX_NEIGHBORS = n;
-    //if (n > 800) MAX_NEIGHBORS = 30; // Aggressively low for 1000 rects
-    //else if (n > 600) MAX_NEIGHBORS = 50;
-    //else if (n > 400) MAX_NEIGHBORS = 100;
-    //else if (n > 300) MAX_NEIGHBORS = 200;
-    //else if (n > 200) MAX_NEIGHBORS = 400;
-
     if (n == 0) return nbs;
 
+    int MAX_NEIGHBORS = 300;
+
     int avg_size_sq = 0;
-    for (const auto& r : solution) {
-        avg_size_sq += r.get_actual_width() * r.get_actual_height();
-    }
+    for (const auto& r : solution) avg_size_sq += r.get_actual_width() * r.get_actual_height();
     avg_size_sq = std::max(1, avg_size_sq / n);
 
     std::unordered_map<int, BoxData> box_data;
@@ -149,41 +140,34 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
         it->second.hash_grid->insert(i, solution[i]);
     }
 
-    // Build the Occupancy Grid for all used boxes (CRITICAL STEP for performance)
-    for (auto& pair : box_data) {
-        build_box_occupancy(pair.second, solution);
+    std::unordered_set<int> frozen_boxes;
+    for (const auto& [box_id, data] : box_data) {
+        double utilization = (double)data.total_area / (double)(L * L);
+        if (utilization > 0.9) frozen_boxes.insert(box_id);
     }
 
-    // New, much faster collision check using the Occupancy Grid. O(w*h) not O(N)
+    for (auto& pair : box_data) build_box_occupancy(pair.second, solution);
+
     auto collides_fast = [&](const RectanglePlacement& r, int target_box_id, int moved_idx) {
         auto it = box_data.find(target_box_id);
         if (it == box_data.end()) return false;
-
         const auto& grid = it->second.occupancy_grid;
         int w = r.get_actual_width();
         int h = r.get_actual_height();
-
-        for (int y = r.y; y < r.y + h; y++) {
+        for (int y = r.y; y < r.y + h; y++)
             for (int x = r.x; x < r.x + w; x++) {
-                // The position in the 1D vector is y * L + x
                 int occupant_idx = grid[y * L + x];
-
-                // If the cell is occupied by ANY rectangle other than the one being moved, it collides.
-                if (occupant_idx != -1 && occupant_idx != moved_idx) {
+                if (occupant_idx != -1 && occupant_idx != moved_idx)
                     return true;
-                }
             }
-        }
         return false;
     };
 
-    // The fast legality check
     auto is_valid_move = [&](const RectanglePlacement& moved, int target_box, int moved_idx) {
         if (moved.x < 0 || moved.y < 0 ||
             moved.x + moved.get_actual_width() > L ||
-            moved.y + moved.get_actual_height() > L) {
+            moved.y + moved.get_actual_height() > L)
             return false;
-        }
         return !collides_fast(moved, target_box, moved_idx);
     };
 
@@ -197,21 +181,17 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
 
     nbs.reserve(MAX_NEIGHBORS);
 
-    //
-
-    // ==== STRATEGY 1: Empty nearly-empty boxes (Contact Points) ====
     std::vector<std::pair<int, int>> sparse_boxes;
     for (const auto& [box_id, data] : box_data) {
-        if (data.rect_indices.size() <= 3 || (data.total_area * 100) / (L * L) < 25) {
+        if (data.rect_indices.size() <= 3 || (data.total_area * 100) / (L * L) < 25)
             sparse_boxes.push_back({box_id, data.rect_indices.size()});
-        }
     }
     std::sort(sparse_boxes.begin(), sparse_boxes.end(),
               [](auto& a, auto& b) { return a.second < b.second; });
 
     for (const auto& [sparse_box_id, _] : sparse_boxes) {
+        if (frozen_boxes.count(sparse_box_id)) continue;
         if (nbs.size() >= MAX_NEIGHBORS) break;
-
         const auto& sparse_data = box_data.at(sparse_box_id);
 
         for (int idx : sparse_data.rect_indices) {
@@ -219,6 +199,7 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
             long long rect_area = rect.get_actual_width() * rect.get_actual_height();
 
             for (const auto& [target_box_id, target_data] : box_data) {
+                if (frozen_boxes.count(target_box_id)) continue;
                 if (target_box_id == sparse_box_id) continue;
                 if (target_data.total_area + rect_area > (long long)L * L * 0.95) continue;
 
@@ -226,21 +207,17 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
                 int rect_w = rect.get_actual_width();
                 int rect_h = rect.get_actual_height();
 
-                // 1. Box Corners (4 candidates)
                 contact_positions.insert({0, 0});
                 contact_positions.insert({L - rect_w, 0});
                 contact_positions.insert({0, L - rect_h});
                 contact_positions.insert({L - rect_w, L - rect_h});
 
-                // 2. Contact Points from existing rectangles
-                // Keep the candidate pool small to maximize iteration speed.
                 int max_candidates = std::min(15, (int)target_data.rect_indices.size());
                 for (int j = 0; j < max_candidates; j++) {
                     int j_idx = target_data.rect_indices[j];
                     const auto& rect_j = solution[j_idx];
                     int rj_w = rect_j.get_actual_width();
                     int rj_h = rect_j.get_actual_height();
-
                     contact_positions.insert({rect_j.x + rj_w, rect_j.y});
                     contact_positions.insert({rect_j.x - rect_w, rect_j.y});
                     contact_positions.insert({rect_j.x, rect_j.y + rj_h});
@@ -250,15 +227,19 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
                 for (const auto& [nx, ny] : contact_positions) {
                     if (nbs.size() >= MAX_NEIGHBORS) break;
 
-                    RectanglePlacement moved = rect;
-                    moved.box_id = target_box_id;
-                    moved.x = nx;
-                    moved.y = ny;
+                    // Try both orientations
+                    for (int rot = 0; rot < 2; ++rot) {
+                        RectanglePlacement moved = rect;
+                        moved.box_id = target_box_id;
+                        moved.x = nx;
+                        moved.y = ny;
+                        if (rot == 1) moved.rotated = !moved.rotated;
 
-                    if (is_valid_move(moved, target_box_id, idx)) {
-                        auto nb = solution;
-                        nb[idx] = moved;
-                        if (!add_neighbor(nb)) break;
+                        if (is_valid_move(moved, target_box_id, idx)) {
+                            auto nb = solution;
+                            nb[idx] = moved;
+                            if (!add_neighbor(nb)) break;
+                        }
                     }
                 }
                 if (nbs.size() >= MAX_NEIGHBORS) break;
@@ -267,145 +248,10 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
         }
     }
 
-    // ==== STRATEGY 2: Rotation-based neighbors (No change) ====
-    std::vector<int> rotatable;
-    for (int i = 0; i < n; i++) {
-        const auto& r = solution[i];
-        if (r.width != r.height) {
-            rotatable.push_back(i);
-        }
-    }
-
-    int max_rotations = std::min(20, (int)rotatable.size());
-    for (int i = 0; i < max_rotations && nbs.size() < MAX_NEIGHBORS; i++) {
-        int idx = rotatable[i];
-        auto rotated_rect = solution[idx];
-        rotated_rect.rotated = !rotated_rect.rotated;
-
-        // Check placement at current (x,y)
-        if (is_valid_move(rotated_rect, rotated_rect.box_id, idx)) {
-            auto nb = solution;
-            nb[idx] = rotated_rect;
-            add_neighbor(nb);
-        }
-
-        // Try placing the rotated rectangle at the corners
-        std::vector<std::pair<int,int>> corners = {
-            {0, 0},
-            {L - rotated_rect.get_actual_width(), 0},
-            {0, L - rotated_rect.get_actual_height()}
-        };
-
-        for (const auto& [cx, cy] : corners) {
-            if (nbs.size() >= MAX_NEIGHBORS) break;
-            rotated_rect.x = cx;
-            rotated_rect.y = cy;
-            if (is_valid_move(rotated_rect, rotated_rect.box_id, idx)) {
-                auto nb = solution;
-                nb[idx] = rotated_rect;
-                add_neighbor(nb);
-            }
-        }
-    }
-
-    // ==== STRATEGY 3: Compaction moves (Simplified) ====
-    std::vector<int> moveable_rects;
-    for (int i = 0; i < n; i++) {
-        if (solution[i].x > 0 || solution[i].y > 0) {
-            moveable_rects.push_back(i);
-        }
-    }
-
-    std::sort(moveable_rects.begin(), moveable_rects.end(), [&](int a, int b) {
-        return (solution[a].x + solution[a].y) > (solution[b].x + solution[b].y);
-    });
-
-    int max_compact = std::min(30, (int)moveable_rects.size());
-    for (int i = 0; i < max_compact && nbs.size() < MAX_NEIGHBORS; i++) {
-        int idx = moveable_rects[i];
-        const auto& rect = solution[idx];
-
-        // Try X-compaction to 0 (Move left)
-        RectanglePlacement moved_x = rect;
-        moved_x.x = 0;
-        if (is_valid_move(moved_x, rect.box_id, idx)) {
-            auto nb = solution;
-            nb[idx] = moved_x;
-            if (!add_neighbor(nb)) break;
-        }
-
-        // Try Y-compaction to 0 (Move down)
-        if (nbs.size() >= MAX_NEIGHBORS) break;
-        RectanglePlacement moved_y = rect;
-        moved_y.y = 0;
-        if (is_valid_move(moved_y, rect.box_id, idx)) {
-            auto nb = solution;
-            nb[idx] = moved_y;
-            if (!add_neighbor(nb)) break;
-        }
-
-        // Try XY-compaction to 0,0 corner
-        if (nbs.size() >= MAX_NEIGHBORS) break;
-        RectanglePlacement moved_xy = rect;
-        moved_xy.x = 0;
-        moved_xy.y = 0;
-        if (is_valid_move(moved_xy, rect.box_id, idx)) {
-            auto nb = solution;
-            nb[idx] = moved_xy;
-            if (!add_neighbor(nb)) break;
-        }
-    }
-
-    // ==== STRATEGY 4: Swap rectangles between boxes (No change) ====
-    if (box_data.size() >= 2 && nbs.size() < MAX_NEIGHBORS) {
-        std::vector<int> box_ids;
-        for (const auto& [bid, _] : box_data) box_ids.push_back(bid);
-
-        int max_swaps = std::min(10, (int)box_ids.size() * (int)box_ids.size());
-        int swaps_tried = 0;
-
-        for (size_t i = 0; i < box_ids.size() && swaps_tried < max_swaps; i++) {
-            for (size_t j = i + 1; j < box_ids.size() && swaps_tried < max_swaps; j++) {
-                int box_a = box_ids[i];
-                int box_b = box_ids[j];
-
-                const auto& data_a = box_data.at(box_a);
-                const auto& data_b = box_data.at(box_b);
-
-                if (!data_a.rect_indices.empty() && !data_b.rect_indices.empty()) {
-                    int idx_a = data_a.rect_indices[0];
-                    int idx_b = data_b.rect_indices[0];
-
-                    auto rect_a = solution[idx_a];
-                    auto rect_b = solution[idx_b];
-
-                    rect_a.box_id = box_b;
-                    rect_a.x = 0;
-                    rect_a.y = 0;
-
-                    rect_b.box_id = box_a;
-                    rect_b.x = 0;
-                    rect_b.y = 0;
-
-                    if (is_valid_move(rect_a, box_b, idx_a) &&
-                        is_valid_move(rect_b, box_a, idx_b)) {
-                        auto nb = solution;
-                        nb[idx_a] = rect_a;
-                        nb[idx_b] = rect_b;
-                        add_neighbor(nb);
-                    }
-
-                    swaps_tried++;
-                }
-                if (nbs.size() >= MAX_NEIGHBORS) break;
-            }
-            if (nbs.size() >= MAX_NEIGHBORS) break;
-        }
-    }
-
-    std::cout << "Generated " << nbs.size() << " valid neighbors using multiple strategies" << std::endl;
+    std::cout << "Generated " << nbs.size() << " valid neighbors (including rotations)" << std::endl;
     return nbs;
 }
+
 
 // ============== Solver Implementation (Unchanged, relies on fast construct_neighbors) ==============
 

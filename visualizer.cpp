@@ -3,7 +3,7 @@
 #include <algorithm>
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
-    : box_length(100), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
+    : box_length(15), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
       instance_generator(
           gui_config.box_size,
           gui_config.min_width,
@@ -161,262 +161,157 @@ void RectangleVisualizer::render() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-
-    // Use current placements
     std::vector<RectanglePlacement> display_placements = current_placements;
 
-    // Calculate which boxes actually have rectangles (no empty boxes)
+    // Collect non-empty boxes
     std::unordered_set<int> used_boxes;
-    for (const auto& placement : display_placements) {
-        used_boxes.insert(placement.box_id);
-    }
-
-    // Convert to sorted vector for consistent display order
+    for (const auto& placement : display_placements) used_boxes.insert(placement.box_id);
     std::vector<int> non_empty_boxes(used_boxes.begin(), used_boxes.end());
     std::sort(non_empty_boxes.begin(), non_empty_boxes.end());
 
-    int num_non_empty_boxes = non_empty_boxes.size();
-
-    // Determine which boxes to display
     std::vector<int> boxes_to_display;
     if (gui_config.view_all_boxes) {
-        // Display only non-empty boxes
         boxes_to_display = non_empty_boxes;
     } else {
-        // Display only the selected box if it's not empty
         if (!non_empty_boxes.empty()) {
-            // Ensure current_box_view is within valid range
-            if (gui_config.current_box_view >= non_empty_boxes.size()) {
-                gui_config.current_box_view = 0;
-            }
+            if (gui_config.current_box_view >= non_empty_boxes.size()) gui_config.current_box_view = 0;
             boxes_to_display.push_back(non_empty_boxes[gui_config.current_box_view]);
         }
     }
 
-    // Draw bounding boxes only for boxes that have rectangles
     float box_spacing = 20.0f;
     int boxes_count = boxes_to_display.size();
     float total_width = boxes_count * (box_length * scale_factor) + (boxes_count - 1) * box_spacing;
     float start_x = (display_w - total_width) / 2.0f;
 
+    // Draw boxes
     for (int display_index = 0; display_index < boxes_count; ++display_index) {
         int box_id = boxes_to_display[display_index];
         float box_x = start_x + display_index * (box_length * scale_factor + box_spacing);
         float box_y = offset.y;
         float box_size = box_length * scale_factor;
 
-        // Box background
-        draw_list->AddRectFilled(
-            ImVec2(box_x, box_y),
-            ImVec2(box_x + box_size, box_y + box_size),
-            IM_COL32(40, 40, 40, 255)
-        );
+        draw_list->AddRectFilled(ImVec2(box_x, box_y), ImVec2(box_x + box_size, box_y + box_size), IM_COL32(40,40,40,255));
+        draw_list->AddRect(ImVec2(box_x, box_y), ImVec2(box_x + box_size, box_y + box_size), IM_COL32(255,255,255,255), 0.0f, 0, 2.0f);
 
-        // Box border
-        draw_list->AddRect(
-            ImVec2(box_x, box_y),
-            ImVec2(box_x + box_size, box_y + box_size),
-            IM_COL32(255, 255, 255, 255),
-            0.0f, 0, 2.0f
-        );
-
-        // Box label
-        std::string box_label = "Box " + std::to_string(box_id + 1);
-        if (!gui_config.view_all_boxes) {
-            box_label += " (Viewing)";
-        }
-        draw_list->AddText(ImVec2(box_x + 5, box_y + 5), IM_COL32(255, 255, 255, 255), box_label.c_str());
+        std::string box_label = "Box " + std::to_string(box_id+1);
+        if (!gui_config.view_all_boxes) box_label += " (Viewing)";
+        draw_list->AddText(ImVec2(box_x + 5, box_y + 5), IM_COL32(255,255,255,255), box_label.c_str());
     }
 
-    // Draw rectangles with colors based on box_id
-    ImU32 box_colors[] = {
-        IM_COL32(65, 105, 225, 200),  // Blue
-        IM_COL32(220, 20, 60, 200),   // Red
-        IM_COL32(50, 205, 50, 200),   // Green
-        IM_COL32(255, 140, 0, 200),   // Orange
-        IM_COL32(148, 0, 211, 200),   // Purple
-        IM_COL32(255, 215, 0, 200),   // Yellow
-        IM_COL32(0, 206, 209, 200),   // Teal
-        IM_COL32(255, 99, 71, 200)    // Tomato
-    };
+    // Colors for boxes
+    ImU32 box_colors[] = {IM_COL32(65,105,225,200),IM_COL32(220,20,60,200),IM_COL32(50,205,50,200),
+                          IM_COL32(255,140,0,200),IM_COL32(148,0,211,200),IM_COL32(255,215,0,200),
+                          IM_COL32(0,206,209,200),IM_COL32(255,99,71,200)};
 
+    // Draw rectangles
     for (const auto& placement : display_placements) {
-        // Skip if we're viewing a specific box and this rectangle isn't in it
         if (!gui_config.view_all_boxes) {
-            // Find the current box we're viewing
             int current_box = boxes_to_display.empty() ? -1 : boxes_to_display[0];
-            if (placement.box_id != current_box) {
-                continue;
-            }
+            if (placement.box_id != current_box) continue;
         }
 
-        // Find the display index for this box
         int display_index = -1;
-        for (int i = 0; i < boxes_to_display.size(); ++i) {
-            if (boxes_to_display[i] == placement.box_id) {
-                display_index = i;
-                break;
-            }
-        }
-        if (display_index == -1) continue;
+        for (int i=0;i<boxes_to_display.size();++i) if (boxes_to_display[i]==placement.box_id) display_index=i;
+        if (display_index==-1) continue;
 
         float box_x = start_x + display_index * (box_length * scale_factor + box_spacing);
 
+        float rect_w = placement.get_actual_width() * scale_factor;
+        float rect_h = placement.get_actual_height() * scale_factor;
         float rect_x = box_x + placement.x * scale_factor;
         float rect_y = offset.y + placement.y * scale_factor;
-        float rect_w = placement.width * scale_factor;
-        float rect_h = placement.height * scale_factor;
 
         ImU32 color = box_colors[placement.box_id % 8];
 
-        // Draw rectangle
-        draw_list->AddRectFilled(
-            ImVec2(rect_x, rect_y),
-            ImVec2(rect_x + rect_w, rect_y + rect_h),
-            color
-        );
+        draw_list->AddRectFilled(ImVec2(rect_x, rect_y), ImVec2(rect_x + rect_w, rect_y + rect_h), color);
+        draw_list->AddRect(ImVec2(rect_x, rect_y), ImVec2(rect_x + rect_w, rect_y + rect_h), IM_COL32(255,255,255,255),0.0f,0,1.5f);
 
-        // Rectangle border
-        draw_list->AddRect(
-            ImVec2(rect_x, rect_y),
-            ImVec2(rect_x + rect_w, rect_y + rect_h),
-            IM_COL32(255, 255, 255, 255),
-            0.0f, 0, 1.5f
-        );
-
-        // Size label
         if (rect_w > 20 && rect_h > 15) {
             std::string size_label = std::to_string(placement.width) + "x" + std::to_string(placement.height);
-            if (placement.rotated) {
-                size_label += " R";
-            }
+            if (placement.rotated) size_label += " R";
+
             ImVec2 text_size = ImGui::CalcTextSize(size_label.c_str());
-            float text_x = rect_x + rect_w / 2 - text_size.x / 2;
-            float text_y = rect_y + rect_h / 2 - text_size.y / 2;
+            float text_x = rect_x + rect_w/2 - text_size.x/2;
+            float text_y = rect_y + rect_h/2 - text_size.y/2;
 
-            draw_list->AddRectFilled(
-                ImVec2(text_x - 2, text_y - 1),
-                ImVec2(text_x + text_size.x + 2, text_y + text_size.y + 1),
-                IM_COL32(0, 0, 0, 128)
-            );
-
-            draw_list->AddText(ImVec2(text_x, text_y), IM_COL32(255, 255, 255, 255), size_label.c_str());
+            draw_list->AddRectFilled(ImVec2(text_x-2,text_y-1), ImVec2(text_x+text_size.x+2,text_y+text_size.y+1), IM_COL32(0,0,0,128));
+            draw_list->AddText(ImVec2(text_x,text_y), IM_COL32(255,255,255,255), size_label.c_str());
         }
     }
 
-    // GUI Window
-    ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+    // GUI window
+    ImGui::SetNextWindowPos(ImVec2(20,20), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400,500), ImGuiCond_FirstUseEver);
     ImGui::Begin("Rectangle Packing Controls");
 
     ImGui::Text("Instance Generator Parameters");
     ImGui::Separator();
-
-    // Parameters that match your InstanceGenerator constructor
-    ImGui::SliderInt("Rectangle Count", &gui_config.rect_count, 1, 1000);
-    ImGui::SliderInt("Box Size (L)", &gui_config.box_size, 50, 200);
-
-    // Update max limits when box size changes
-    if (ImGui::IsItemDeactivatedAfterEdit()) {
-        updateMaxSizeLimits();
-    }
-
-    ImGui::SliderInt("Min Width", &gui_config.min_width, 1, box_length);
-    ImGui::SliderInt("Max Width", &gui_config.max_width, gui_config.min_width, box_length);
-    ImGui::SliderInt("Min Height", &gui_config.min_height, 1, box_length);
-    ImGui::SliderInt("Max Height", &gui_config.max_height, gui_config.min_height, box_length);
+    ImGui::SliderInt("Rectangle Count",&gui_config.rect_count,1,1000);
+    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,50);
+    if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
+    ImGui::SliderInt("Min Width",&gui_config.min_width,1,box_length);
+    ImGui::SliderInt("Max Width",&gui_config.max_width,gui_config.min_width,box_length);
+    ImGui::SliderInt("Min Height",&gui_config.min_height,1,box_length);
+    ImGui::SliderInt("Max Height",&gui_config.max_height,gui_config.min_height,box_length);
 
     ImGui::Separator();
-
-    // Box viewing controls
     ImGui::Text("Box Viewing:");
-    ImGui::Checkbox("View All Boxes", &gui_config.view_all_boxes);
-
-    if (!gui_config.view_all_boxes && num_non_empty_boxes > 0) {
-        // Update current_box_view to be within valid range
-        if (gui_config.current_box_view >= num_non_empty_boxes) {
-            gui_config.current_box_view = 0;
-        }
-
-        ImGui::SliderInt("View Box", &gui_config.current_box_view, 0, num_non_empty_boxes - 1);
-        ImGui::Text("Viewing Box %d of %d", gui_config.current_box_view + 1, num_non_empty_boxes);
-    } else if (!gui_config.view_all_boxes && num_non_empty_boxes == 0) {
+    ImGui::Checkbox("View All Boxes",&gui_config.view_all_boxes);
+    if (!gui_config.view_all_boxes && non_empty_boxes.size()>0) {
+        if (gui_config.current_box_view>=non_empty_boxes.size()) gui_config.current_box_view=0;
+        ImGui::SliderInt("View Box",&gui_config.current_box_view,0,(int)non_empty_boxes.size()-1);
+        ImGui::Text("Viewing Box %d of %zu", gui_config.current_box_view+1, non_empty_boxes.size());
+    } else if (!gui_config.view_all_boxes && non_empty_boxes.empty()) {
         ImGui::Text("No boxes with rectangles to display");
     }
 
     ImGui::Separator();
-
-    // Action buttons
-    if (ImGui::Button("Generate Random Problem")) {
-        generateRandomProblem();
-    }
-
+    if (ImGui::Button("Generate Random Problem")) generateRandomProblem();
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
         current_placements.clear();
-        gui_config.current_box_view = 0;
-        gui_config.show_solver_steps = false;
-        // Reset problem with empty solution
-        problem = RectangleFittingProblem(gui_config.box_size, std::vector<RectanglePlacement>());
+        gui_config.current_box_view=0;
+        gui_config.show_solver_steps=false;
+        problem = RectangleFittingProblem(gui_config.box_size,std::vector<RectanglePlacement>());
     }
 
     ImGui::Separator();
-
-    // Solver controls
     ImGui::Text("Solver Controls:");
-    ImGui::SliderInt("Max Solver Steps", &gui_config.max_solver_steps, 1, 200);
-    ImGui::Checkbox("Show Solver Steps", &gui_config.show_solver_steps);
-
-    // NEW: Solve Next Step button
-    if (ImGui::Button("Solve Next Step")) {
-        solveNextStep();
-    }
-
+    ImGui::SliderInt("Max Solver Steps",&gui_config.max_solver_steps,1,200);
+    ImGui::Checkbox("Show Solver Steps",&gui_config.show_solver_steps);
+    if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
-
-    if (ImGui::Button("Run Solver")) {
-        runSolver();
-    }
+    if (ImGui::Button("Run Solver")) runSolver();
 
     ImGui::Separator();
     ImGui::Text("Statistics:");
     ImGui::Text("Rectangles: %zu", display_placements.size());
-    ImGui::Text("Boxes Used: %d", num_non_empty_boxes);
+    ImGui::Text("Boxes Used: %zu", non_empty_boxes.size());
 
-    // Calculate utilization for current view
-    if (num_non_empty_boxes > 0) {
-        float total_area;
-        float used_area = 0;
-
+    if (!display_placements.empty()) {
+        float total_area=0, used_area=0;
         if (gui_config.view_all_boxes) {
-            total_area = num_non_empty_boxes * box_length * box_length;
-            for (const auto& placement : display_placements) {
-                used_area += placement.width * placement.height;
-            }
+            total_area = non_empty_boxes.size()*box_length*box_length;
+            for (auto& r:display_placements) used_area += r.width*r.height;
         } else {
             if (!boxes_to_display.empty()) {
-                int current_box = boxes_to_display[0];
-                total_area = box_length * box_length;
-                for (const auto& placement : display_placements) {
-                    if (placement.box_id == current_box) {
-                        used_area += placement.width * placement.height;
-                    }
-                }
+                total_area = box_length*box_length;
+                for (auto& r:display_placements) if (r.box_id==boxes_to_display[0]) used_area+=r.width*r.height;
             }
         }
-
-        if (total_area > 0) {
-            float utilization = (used_area / total_area) * 100.0f;
+        if (total_area>0) {
+            float utilization = (used_area/total_area)*100.0f;
             ImGui::Text("Utilization: %.1f%%", utilization);
         }
     }
 
     ImGui::End();
-
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(static_cast<GLFWwindow*>(window));
 }
+
 
 bool RectangleVisualizer::shouldClose() const {
     return glfwWindowShouldClose(static_cast<GLFWwindow*>(window));
