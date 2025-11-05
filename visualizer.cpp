@@ -19,7 +19,6 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
         return;
     }
 
-    // Generate random problem at startup
     generateRandomProblem();
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -97,14 +96,12 @@ void RectangleVisualizer::updateScaleAndOffset() {
 }
 
 void RectangleVisualizer::updateMaxSizeLimits() {
-    // Ensure max dimensions don't exceed box size
     if (gui_config.max_width > box_length) {
         gui_config.max_width = box_length;
     }
     if (gui_config.max_height > box_length) {
         gui_config.max_height = box_length;
     }
-    // Ensure min dimensions don't exceed max dimensions
     if (gui_config.min_width > gui_config.max_width) {
         gui_config.min_width = gui_config.max_width;
     }
@@ -113,8 +110,11 @@ void RectangleVisualizer::updateMaxSizeLimits() {
     }
 }
 
+void RectangleVisualizer::saveOriginalState() {
+    original_placements = current_placements;
+}
+
 void RectangleVisualizer::generateInstance() {
-    // Create InstanceGenerator with GUI parameters
     instance_generator = InstanceGenerator(
         gui_config.box_size,
         gui_config.min_width,
@@ -126,6 +126,8 @@ void RectangleVisualizer::generateInstance() {
     current_placements = instance_generator.generate_rectangles(gui_config.rect_count);
     problem = RectangleFittingProblem(gui_config.box_size, current_placements);
 
+    saveOriginalState();
+
     setPlacements(problem.get_current_solution());
     setBoxLength(gui_config.box_size);
 }
@@ -135,13 +137,54 @@ void RectangleVisualizer::generateRandomProblem() {
 }
 
 void RectangleVisualizer::runSolver() {
-    solver.solve(problem, gui_config.num_reruns,gui_config.max_rectangle_in_subproblem);
-    current_placements = problem.get_current_solution();
+    if (gui_config.neighborhood_strategy == 0) {
+        // Geometry Based
+        if (!geometry_solver) {
+            geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+        }
+        auto result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+        current_placements = result;
+        problem.set_current_solution(result);
+    } else {
+        // Permutation Based
+        if (!permutation_solver) {
+            permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+        }
+        auto result = permutation_solver->solve(problem, gui_config.num_reruns);
+        current_placements = result;
+        problem.set_current_solution(result);
+    }
 }
 
 void RectangleVisualizer::solveNextStep() {
-    solver.solve_one_step(problem);
-    current_placements = problem.get_current_solution();
+    if (gui_config.neighborhood_strategy == 0) {
+        // Geometry Based
+        if (!geometry_solver) {
+            geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+        }
+        auto result = geometry_solver->solve_one_step(problem);
+        current_placements = result;
+        problem.set_current_solution(result);
+    } else {
+        // Permutation Based
+        if (!permutation_solver) {
+            permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+        }
+        auto result = permutation_solver->solve_one_step(problem);
+        current_placements = result;
+        problem.set_current_solution(result);
+    }
+}
+
+void RectangleVisualizer::revertToOriginal() {
+    if (!original_placements.empty()) {
+        current_placements = original_placements;
+        problem = RectangleFittingProblem(gui_config.box_size, original_placements);
+        setPlacements(original_placements);
+        std::cout << "Reverted to original problem state" << std::endl;
+    } else {
+        std::cout << "No original state saved to revert to" << std::endl;
+    }
 }
 
 void RectangleVisualizer::pollEvents() {
@@ -164,7 +207,6 @@ void RectangleVisualizer::render() {
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     std::vector<RectanglePlacement> display_placements = current_placements;
 
-    // Collect non-empty boxes
     std::unordered_set<int> used_boxes;
     for (const auto& placement : display_placements) used_boxes.insert(placement.box_id);
     std::vector<int> non_empty_boxes(used_boxes.begin(), used_boxes.end());
@@ -183,9 +225,8 @@ void RectangleVisualizer::render() {
     float box_spacing = 20.0f;
     int boxes_count = boxes_to_display.size();
     float total_width = boxes_count * (box_length * scale_factor) + (boxes_count - 1) * box_spacing;
-    float start_x = (display_w - total_width) / 2.0f; // Original centering logic
+    float start_x = (display_w - total_width) / 2.0f;
 
-    // Draw boxes
     for (int display_index = 0; display_index < boxes_count; ++display_index) {
         int box_id = boxes_to_display[display_index];
         float box_x = start_x + display_index * (box_length * scale_factor + box_spacing);
@@ -200,12 +241,10 @@ void RectangleVisualizer::render() {
         draw_list->AddText(ImVec2(box_x + 5, box_y + 5), IM_COL32(255,255,255,255), box_label.c_str());
     }
 
-    // Colors for boxes
     ImU32 box_colors[] = {IM_COL32(65,105,225,200),IM_COL32(220,20,60,200),IM_COL32(50,205,50,200),
                           IM_COL32(255,140,0,200),IM_COL32(148,0,211,200),IM_COL32(255,215,0,200),
                           IM_COL32(0,206,209,200),IM_COL32(255,99,71,200)};
 
-    // Draw rectangles
     for (const auto& placement : display_placements) {
         if (!gui_config.view_all_boxes) {
             int current_box = boxes_to_display.empty() ? -1 : boxes_to_display[0];
@@ -241,9 +280,8 @@ void RectangleVisualizer::render() {
         }
     }
 
-    // GUI window
     ImGui::SetNextWindowPos(ImVec2(20,20), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(400,500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400,550), ImGuiCond_FirstUseEver);
     ImGui::Begin("Rectangle Packing Controls");
 
     ImGui::Text("Instance Generator Parameters");
@@ -272,18 +310,30 @@ void RectangleVisualizer::render() {
     ImGui::SameLine();
     if (ImGui::Button("Clear")) {
         current_placements.clear();
+        original_placements.clear();
         gui_config.current_box_view=0;
-        gui_config.show_solver_steps=false;
         problem = RectangleFittingProblem(gui_config.box_size,std::vector<RectanglePlacement>());
+        geometry_solver.reset();
+        permutation_solver.reset();
     }
 
     ImGui::Separator();
-    ImGui::Text("Solver Controls:");
+    ImGui::Text("Solver Strategy:");
+
+    const char* strategies[] = { "Geometry Based", "Permutation Based" };
+    ImGui::Combo("Neighborhood Strategy", &gui_config.neighborhood_strategy, strategies, IM_ARRAYSIZE(strategies));
+
+    ImGui::Separator();
+    ImGui::Text("Solver Parameters:");
     ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,100);
     ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,200);
+
+    ImGui::Separator();
     if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
     if (ImGui::Button("Run Solver")) runSolver();
+    ImGui::SameLine();
+    if (ImGui::Button("Revert")) revertToOriginal();
 
     ImGui::Separator();
     ImGui::Text("Statistics:");
@@ -312,7 +362,6 @@ void RectangleVisualizer::render() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(static_cast<GLFWwindow*>(window));
 }
-
 
 bool RectangleVisualizer::shouldClose() const {
     return glfwWindowShouldClose(static_cast<GLFWwindow*>(window));

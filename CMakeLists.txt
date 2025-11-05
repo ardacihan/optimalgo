@@ -44,7 +44,8 @@ add_executable(optimalgo
         InstanceGenerator.cpp
         OptimizationProblem.cpp
         RectangleFittingProblem.cpp
-        Solver.cpp
+        GeometryBasedNeighborhoodSolver.cpp
+        RuleBasedNeighborhoodSolver.cpp  # ADDED THIS LINE
 
         # Visualization files
         visualizer.cpp

@@ -1,12 +1,16 @@
 //
-// Created by arda on 05.11.25.
+// Solver.h
 //
 
-#ifndef OPTIMALGO_SOLVER_H
-#define OPTIMALGO_SOLVER_H
+#ifndef GEOMATRYBASEDNEIGHBORHOODSOLVER_H
+#define GEOMATRYBASEDNEIGHBORHOODSOLVER_H
 
+#include "RectangleFittingProblem.h"
+#include <vector>
 
-class Solver {
+#include "Solver.h"
+
+class GeometryBasedNeighborhoodSolver : Solver {
 public:
     std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem);
 
@@ -23,4 +27,4 @@ private:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 };
 
-#endif //OPTIMALGO_SOLVER_H
+#endif //  GEOMATRYBASEDNEIGHBORHOODSOLVER_H
