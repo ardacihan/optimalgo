@@ -119,7 +119,7 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     int n = solution.size();
     if (n == 0) return nbs;
 
-    int MAX_NEIGHBORS = 300;
+    int MAX_NEIGHBORS = 100;
 
     int avg_size_sq = 0;
     for (const auto& r : solution) avg_size_sq += r.get_actual_width() * r.get_actual_height();
@@ -253,6 +253,8 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
 }
 
 
+
+
 // ============== Solver Implementation (Unchanged, relies on fast construct_neighbors) ==============
 
 std::vector<RectanglePlacement>
@@ -260,36 +262,61 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
     std::vector<RectanglePlacement> solution = problem.get_current_solution();
     if (max_steps <= 0) return solution;
 
-    auto neighbors = construct_neighbors(problem);
-    if (neighbors.empty()) {
-        std::cout << "No neighbors generated, stopping." << std::endl;
-        return solution;
+    // Count unique bounding boxes
+    std::unordered_set<int> box_ids;
+    for (const auto& placement : solution) {
+        box_ids.insert(placement.box_id);
     }
 
-    int current_obj = problem.objective(solution);
+    // If less than 100 bounding boxes, use normal neighborhood search
+    if (box_ids.size() < 100) {
+        auto neighbors = construct_neighbors(problem);
+        if (neighbors.empty()) {
+            std::cout << "No neighbors generated, stopping." << std::endl;
+            return solution;
+        }
 
-    std::vector<RectanglePlacement> best_neighbor = solution;
-    int best_obj = current_obj;
+        int current_obj = problem.objective(solution);
+        std::vector<RectanglePlacement> best_neighbor = solution;
+        int best_obj = current_obj;
 
-    for (auto &n : neighbors) {
-        int obj = problem.objective(n);
-        if (obj > best_obj) {
-            best_obj = obj;
-            best_neighbor = n;
+        for (auto &n : neighbors) {
+            int obj = problem.objective(n);
+            if (obj > best_obj) {
+                best_obj = obj;
+                best_neighbor = n;
+            }
+        }
+
+        if (best_obj > current_obj) {
+            problem.set_current_solution(best_neighbor);
+            return solve(problem, max_steps - 1);
+        } else {
+            std::cout << "No improvement found (current: " << current_obj
+                      << ", best neighbor: " << best_obj << "), stopping early." << std::endl;
+            return solution;
         }
     }
+    // If 100 or more bounding boxes, split recursively
+    else {
+        auto [left, right] = splitRectanglesByBoxId(solution);
+        int L = problem.get_box_length();
 
-    if (best_obj > current_obj) {
-        problem.set_current_solution(best_neighbor);
-        return solve(problem, max_steps - 1);
-    } else {
-        std::cout << "No improvement found (current: " << current_obj
-                  << ", best neighbor: " << best_obj << "), stopping early." << std::endl;
-        return solution;
+        RectangleFittingProblem p1(L, left);
+        RectangleFittingProblem p2(L, right);
+
+        // Recursively solve both subproblems
+        auto solved_left = solve(p1, max_steps - 1);
+        auto solved_right = solve(p2, max_steps - 1);
+
+        // Merge solutions
+        std::vector<RectanglePlacement> merged = solved_left;
+        merged.insert(merged.end(), solved_right.begin(), solved_right.end());
+
+        problem.set_current_solution(merged);
+        return merged;
     }
 }
-
-
 std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem) {
     std::vector<RectanglePlacement> solution = problem.get_current_solution();
 
@@ -314,4 +341,94 @@ std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(
 
     problem.set_current_solution(best_neighbor);
     return best_neighbor;
+}
+
+std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step_recursive(RectangleFittingProblem &problem) {
+    std::vector<RectanglePlacement> solution = problem.get_current_solution();
+
+    auto [left,right] = splitRectanglesByBoxId(solution);
+
+    int L = problem.get_box_length();
+
+    RectangleFittingProblem p1 = RectangleFittingProblem(L,left);
+    RectangleFittingProblem p2 = RectangleFittingProblem(L,right);
+
+    auto left_neighborhood = construct_neighbors(p1);
+    if (left_neighborhood.empty()) {
+        std::cout << "No neighbors generated, stopping." << std::endl;
+        return solution;
+    }
+    auto right_neighborhood =  construct_neighbors(p2);
+    if (right_neighborhood.empty()) {
+        std::cout << "No neighbors generated, stopping." << std::endl;
+        return solution;
+    }
+
+    int obj_left = problem.objective(left);
+    int obj_right = problem.objective(right);
+
+    std::vector<RectanglePlacement> best_neighbor_left= left;
+    std::vector<RectanglePlacement> best_neighbor_right = right;
+
+    int best_obj_left = obj_left;
+    int best_obj_right = obj_right;
+
+    for (auto &n : left_neighborhood) {
+        int obj = problem.objective(n);
+        if (obj > best_obj_left) {
+            best_obj_left = obj;
+            best_neighbor_left = n;
+        }
+    }
+
+    for (auto &n : right_neighborhood) {
+        int obj = problem.objective(n);
+        if (obj > best_obj_right) {
+            best_obj_right = obj;
+            best_neighbor_right = n;
+        }
+    }
+
+    // MERGE THE SOLUTIONS
+    std::vector<RectanglePlacement> merged = best_neighbor_left;
+    merged.insert(merged.end(), best_neighbor_right.begin(), best_neighbor_right.end());
+
+    problem.set_current_solution(merged);
+    return merged;
+}
+
+
+std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
+GeometryBasedNeighborhoodSolver::splitRectanglesByBoxId(const std::vector<RectanglePlacement>& placements) {
+    std::vector<RectanglePlacement> array1, array2;
+
+    if (placements.empty()) {
+        return {array1, array2};
+    }
+
+    // Group placements by box_id
+    std::unordered_map<int, std::vector<RectanglePlacement>> boxes;
+    for (const auto& placement : placements) {
+        boxes[placement.box_id].push_back(placement);
+    }
+
+    // Convert to vector for deterministic ordering (optional)
+    std::vector<std::pair<int, std::vector<RectanglePlacement>>> boxVector(boxes.begin(), boxes.end());
+
+    // Sort by box_id for deterministic results (optional)
+    std::sort(boxVector.begin(), boxVector.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    // Alternate assignment to balance the arrays
+    for (size_t i = 0; i < boxVector.size(); ++i) {
+        if (i % 2 == 0) {
+            // Add all placements from this box to array1
+            array1.insert(array1.end(), boxVector[i].second.begin(), boxVector[i].second.end());
+        } else {
+            // Add all placements from this box to array2
+            array2.insert(array2.end(), boxVector[i].second.begin(), boxVector[i].second.end());
+        }
+    }
+
+    return {array1, array2};
 }
