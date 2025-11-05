@@ -10,7 +10,9 @@
 
 class GeometryBasedNeighborhoodSolver {
 public:
-    std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int max_steps);
+    std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem);
+
+    std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int max_steps, int reruns_left);
 
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem);
 

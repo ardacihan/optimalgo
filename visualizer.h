@@ -22,6 +22,8 @@ struct GUIConfig {
     int current_box_view = 0;
     bool show_solver_steps = false;
     int max_solver_steps = 2000;
+    int num_reruns = 15;
+    int max_rectangle_in_subproblem = 50;
 };
 
 class RectangleVisualizer {

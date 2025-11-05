@@ -40,7 +40,6 @@ endif()
 
 # Your main executable
 add_executable(optimalgo
-        main.cpp
         RectanglePlacement.cpp
         InstanceGenerator.cpp
         OptimizationProblem.cpp

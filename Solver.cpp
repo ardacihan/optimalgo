@@ -252,24 +252,26 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     return nbs;
 }
 
-
-
-
-// ============== Solver Implementation (Unchanged, relies on fast construct_neighbors) ==============
+// ============== Solver Implementation (Updated to use GUI config) ==============
 
 std::vector<RectanglePlacement>
-GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max_steps) {
-    std::vector<RectanglePlacement> solution = problem.get_current_solution();
-    if (max_steps <= 0) return solution;
+GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem) {
+    return solve_with_reruns(problem, num_reruns, max_rectangle_in_subproblem);
+}
 
-    // Count unique bounding boxes
+std::vector<RectanglePlacement>
+GeometryBasedNeighborhoodSolver::solve_with_reruns(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem) {
+    std::vector<RectanglePlacement> solution = problem.get_current_solution();
+
+    if (num_reruns <= 0) return solution;
+
     std::unordered_set<int> box_ids;
     for (const auto& placement : solution) {
         box_ids.insert(placement.box_id);
     }
 
-    // If less than 100 bounding boxes, use normal neighborhood search
-    if (box_ids.size() < 100) {
+    // A. Subproblem size is small enough: Apply local search
+    if (box_ids.size() < max_rectangle_in_subproblem) {
         auto neighbors = construct_neighbors(problem);
         if (neighbors.empty()) {
             std::cout << "No neighbors generated, stopping." << std::endl;
@@ -289,34 +291,80 @@ GeometryBasedNeighborhoodSolver::solve(RectangleFittingProblem &problem, int max
         }
 
         if (best_obj > current_obj) {
+            // Continue local search with the new, better solution
             problem.set_current_solution(best_neighbor);
-            return solve(problem, max_steps - 1);
+            return solve_with_reruns(problem, num_reruns, max_rectangle_in_subproblem);
         } else {
-            std::cout << "No improvement found (current: " << current_obj
-                      << ", best neighbor: " << best_obj << "), stopping early." << std::endl;
+            // Local optimum reached, return the solution for merging/rerun logic in the caller
             return solution;
         }
     }
-    // If 100 or more bounding boxes, split recursively
+    // B. Subproblem is too large: Divide-and-Conquer
     else {
+        // --- Divide ---
         auto [left, right] = splitRectanglesByBoxId(solution);
         int L = problem.get_box_length();
 
         RectangleFittingProblem p1(L, left);
         RectangleFittingProblem p2(L, right);
 
-        // Recursively solve both subproblems
-        auto solved_left = solve(p1, max_steps - 1);
-        auto solved_right = solve(p2, max_steps - 1);
+        // --- Conquer (Recursive Calls) ---
+        // Pass the full num_reruns to the subproblems
+        auto solved_left = solve_with_reruns(p1, num_reruns, max_rectangle_in_subproblem);
+        auto solved_right = solve_with_reruns(p2, num_reruns, max_rectangle_in_subproblem);
 
-        // Merge solutions
+        // --- Merge ---
         std::vector<RectanglePlacement> merged = solved_left;
         merged.insert(merged.end(), solved_right.begin(), solved_right.end());
 
         problem.set_current_solution(merged);
+
+        // --- Rerun Logic (Filter and Re-optimize) ---
+        if (num_reruns > 1) {
+            auto coverage = problem.get_coverage_each_bounding_box();
+            std::vector<RectanglePlacement> remaining_solution;
+            int total_box_area = L * L;
+            int threshold = total_box_area * 0.8;
+
+            // Filter out rectangles in boxes that are NOT filled
+            for (const auto& placement : merged) {
+                if (coverage[placement.box_id] <= threshold) {
+                    remaining_solution.push_back(placement);
+                }
+            }
+
+            if (!remaining_solution.empty()) {
+                std::unordered_set<int> remaining_box_ids;
+                for (const auto& placement : remaining_solution) {
+                    remaining_box_ids.insert(placement.box_id);
+                }
+
+                if (remaining_box_ids.size() >= max_rectangle_in_subproblem) {
+                    RectangleFittingProblem remaining_problem(L, remaining_solution);
+
+                    // Decrement num_reruns for the re-optimization step
+                    auto optimized_remaining = solve_with_reruns(remaining_problem, num_reruns - 1, max_rectangle_in_subproblem);
+
+                    std::vector<RectanglePlacement> final_solution;
+                    // Keep the 'filled' ones
+                    for (const auto& placement : merged) {
+                        if (coverage[placement.box_id] > threshold) {
+                            final_solution.push_back(placement);
+                        }
+                    }
+                    // Add the re-optimized 'remaining' ones
+                    final_solution.insert(final_solution.end(), optimized_remaining.begin(), optimized_remaining.end());
+
+                    problem.set_current_solution(final_solution);
+                    return final_solution;
+                }
+            }
+        }
+
         return merged;
     }
 }
+
 std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem) {
     std::vector<RectanglePlacement> solution = problem.get_current_solution();
 

@@ -1,6 +1,7 @@
 #include "visualizer.h"
 #include <iostream>
 #include <algorithm>
+#include "imgui_internal.h"
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
     : box_length(15), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
@@ -134,7 +135,7 @@ void RectangleVisualizer::generateRandomProblem() {
 }
 
 void RectangleVisualizer::runSolver() {
-    solver.solve(problem, gui_config.max_solver_steps);
+    solver.solve(problem, gui_config.num_reruns,gui_config.max_rectangle_in_subproblem);
     current_placements = problem.get_current_solution();
 }
 
@@ -182,7 +183,7 @@ void RectangleVisualizer::render() {
     float box_spacing = 20.0f;
     int boxes_count = boxes_to_display.size();
     float total_width = boxes_count * (box_length * scale_factor) + (boxes_count - 1) * box_spacing;
-    float start_x = (display_w - total_width) / 2.0f;
+    float start_x = (display_w - total_width) / 2.0f; // Original centering logic
 
     // Draw boxes
     for (int display_index = 0; display_index < boxes_count; ++display_index) {
@@ -278,8 +279,8 @@ void RectangleVisualizer::render() {
 
     ImGui::Separator();
     ImGui::Text("Solver Controls:");
-    ImGui::SliderInt("Max Solver Steps",&gui_config.max_solver_steps,1,200);
-    ImGui::Checkbox("Show Solver Steps",&gui_config.show_solver_steps);
+    ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,100);
+    ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,200);
     if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
     if (ImGui::Button("Run Solver")) runSolver();
