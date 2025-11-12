@@ -6,6 +6,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <chrono>
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -26,7 +27,7 @@ struct GUIConfig {
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
-    int num_reruns = 15;
+    int num_reruns = 2;
     int max_rectangle_in_subproblem = 50;
 
     // Strategy selection
@@ -55,6 +56,7 @@ private:
     std::atomic<bool> solver_thread_active;
     std::mutex solver_mutex;
     std::vector<RectanglePlacement> pending_result;
+    std::chrono::steady_clock::time_point solver_start_time;
 
     void updateScaleAndOffset();
     void updateMaxSizeLimits();

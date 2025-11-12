@@ -2,6 +2,8 @@
 #include <iostream>
 #include <algorithm>
 #include <unordered_set>
+#include <sstream>
+#include <iomanip>
 #include "imgui_internal.h"
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
@@ -156,6 +158,7 @@ void RectangleVisualizer::runSolver() {
 
     is_solving = true;
     solver_thread_active = true;
+    solver_start_time = std::chrono::steady_clock::now();
 
     // Launch solver in separate thread
     solver_thread = std::thread([this]() {
@@ -357,7 +360,7 @@ void RectangleVisualizer::render() {
 
     ImGui::Separator();
     ImGui::Text("Solver Parameters:");
-    ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,100);
+    ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,5);
     ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
 
     ImGui::Separator();
@@ -371,15 +374,30 @@ void RectangleVisualizer::render() {
     if (ImGui::Button("Revert")) revertToOriginal();
     ImGui::EndDisabled();
 
-    // Show animated "Calculating" message while solving
+    // Show animated "Calculating" message with timer while solving
     if (is_solving) {
         ImGui::Separator();
+
+        // Calculate elapsed time
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - solver_start_time);
+
+        // Format time as MM:SS
+        std::ostringstream time_ss;
+        time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
+                << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
+
+        // Animated dots
         int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
         std::string calculating_text = "Calculating";
         for (int i = 0; i < dot_count; i++) {
             calculating_text += ".";
         }
+
+        // Display with timer
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", calculating_text.c_str());
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
     }
 
     ImGui::Separator();
