@@ -3,12 +3,20 @@
 
 #include "RectangleFittingProblem.h"
 #include <vector>
+#include "Solver.h"
 
-class RuleBasedNeighborhoodSolver {
+class RuleBasedNeighborhoodSolver : Solver {
 public:
     // Main solve methods (same interface as GeometryBased!)
-    std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int max_steps);
+
+    std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int max_steps, int rectangles_in_subproblem);
+
+    std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int num_reruns,
+                                                      int max_rectangle_in_subproblem);
+
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem);
+
+    std::vector<RectanglePlacement> solve_one_step_recursive(RectangleFittingProblem &problem);
 
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 

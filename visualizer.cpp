@@ -150,7 +150,7 @@ void RectangleVisualizer::runSolver() {
         if (!permutation_solver) {
             permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
         }
-        auto result = permutation_solver->solve(problem, gui_config.num_reruns);
+        auto result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
         current_placements = result;
         problem.set_current_solution(result);
     }
@@ -308,14 +308,14 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
     if (ImGui::Button("Generate Random Problem")) generateRandomProblem();
     ImGui::SameLine();
-    if (ImGui::Button("Clear")) {
-        current_placements.clear();
-        original_placements.clear();
-        gui_config.current_box_view=0;
-        problem = RectangleFittingProblem(gui_config.box_size,std::vector<RectanglePlacement>());
-        geometry_solver.reset();
-        permutation_solver.reset();
-    }
+    //if (ImGui::Button("Clear")) {
+    //    current_placements.clear();
+    //    original_placements.clear();
+    //    gui_config.current_box_view=0;
+    //    problem = RectangleFittingProblem(gui_config.box_size,std::vector<RectanglePlacement>());
+    //    geometry_solver.reset();
+    //    permutation_solver.reset();
+    //}
 
     ImGui::Separator();
     ImGui::Text("Solver Strategy:");
@@ -326,7 +326,7 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
     ImGui::Text("Solver Parameters:");
     ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,100);
-    ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,200);
+    ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
 
     ImGui::Separator();
     if (ImGui::Button("Solve Next Step")) solveNextStep();

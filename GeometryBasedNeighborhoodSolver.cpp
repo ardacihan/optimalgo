@@ -367,32 +367,6 @@ GeometryBasedNeighborhoodSolver::solve_with_reruns(RectangleFittingProblem &prob
 std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem) {
     std::vector<RectanglePlacement> solution = problem.get_current_solution();
 
-    auto neighbors = construct_neighbors(problem);
-    if (neighbors.empty()) {
-        std::cout << "No neighbors generated, stopping." << std::endl;
-        return solution;
-    }
-
-    int current_obj = problem.objective(solution);
-
-    std::vector<RectanglePlacement> best_neighbor = solution;
-    int best_obj = current_obj;
-
-    for (auto &n : neighbors) {
-        int obj = problem.objective(n);
-        if (obj > best_obj) {
-            best_obj = obj;
-            best_neighbor = n;
-        }
-    }
-
-    problem.set_current_solution(best_neighbor);
-    return best_neighbor;
-}
-
-std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step_recursive(RectangleFittingProblem &problem) {
-    std::vector<RectanglePlacement> solution = problem.get_current_solution();
-
     auto [left,right] = splitRectanglesByBoxId(solution);
 
     int L = problem.get_box_length();
@@ -444,38 +418,3 @@ std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step_
     return merged;
 }
 
-
-std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
-GeometryBasedNeighborhoodSolver::splitRectanglesByBoxId(const std::vector<RectanglePlacement>& placements) {
-    std::vector<RectanglePlacement> array1, array2;
-
-    if (placements.empty()) {
-        return {array1, array2};
-    }
-
-    // Group placements by box_id
-    std::unordered_map<int, std::vector<RectanglePlacement>> boxes;
-    for (const auto& placement : placements) {
-        boxes[placement.box_id].push_back(placement);
-    }
-
-    // Convert to vector for deterministic ordering (optional)
-    std::vector<std::pair<int, std::vector<RectanglePlacement>>> boxVector(boxes.begin(), boxes.end());
-
-    // Sort by box_id for deterministic results (optional)
-    std::sort(boxVector.begin(), boxVector.end(),
-              [](const auto& a, const auto& b) { return a.first < b.first; });
-
-    // Alternate assignment to balance the arrays
-    for (size_t i = 0; i < boxVector.size(); ++i) {
-        if (i % 2 == 0) {
-            // Add all placements from this box to array1
-            array1.insert(array1.end(), boxVector[i].second.begin(), boxVector[i].second.end());
-        } else {
-            // Add all placements from this box to array2
-            array2.insert(array2.end(), boxVector[i].second.begin(), boxVector[i].second.end());
-        }
-    }
-
-    return {array1, array2};
-}

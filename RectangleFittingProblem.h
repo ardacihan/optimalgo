@@ -48,6 +48,7 @@ public:
     }
 
     static bool edges_touching(const RectanglePlacement& r1, const RectanglePlacement& r2);
+
 };
 
 #endif // RECTANGLEFITTINGPROBLEM_H

@@ -20,9 +20,6 @@ public:
 
     std::vector<RectanglePlacement> solve_one_step_recursive(RectangleFittingProblem &problem);
 
-    std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>> splitRectanglesByBoxId(
-        const std::vector<RectanglePlacement> &placements);
-
 private:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 };
