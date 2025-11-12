@@ -18,6 +18,10 @@ public:
 
     std::vector<RectanglePlacement> solve_one_step_recursive(RectangleFittingProblem &problem);
 
+    std::vector<RectanglePlacement> apply_greedy_placement_indexed(const std::vector<int> &rect_indices,
+                                                                   const std::vector<std::pair<int, int>> &rect_dims,
+                                                                   int L);
+
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
 
 private:
