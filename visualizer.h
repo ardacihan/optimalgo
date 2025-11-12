@@ -3,6 +3,9 @@
 
 #include <vector>
 #include <memory>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -45,6 +48,13 @@ private:
     RectangleFittingProblem problem;
     std::unique_ptr<GeometryBasedNeighborhoodSolver> geometry_solver;
     std::unique_ptr<RuleBasedNeighborhoodSolver> permutation_solver;
+
+    // Threading support for solver
+    std::thread solver_thread;
+    std::atomic<bool> is_solving;
+    std::atomic<bool> solver_thread_active;
+    std::mutex solver_mutex;
+    std::vector<RectanglePlacement> pending_result;
 
     void updateScaleAndOffset();
     void updateMaxSizeLimits();

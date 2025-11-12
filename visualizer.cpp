@@ -1,10 +1,12 @@
 #include "visualizer.h"
 #include <iostream>
 #include <algorithm>
+#include <unordered_set>
 #include "imgui_internal.h"
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
     : box_length(15), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
+      is_solving(false), solver_thread_active(false),
       instance_generator(
           gui_config.box_size,
           gui_config.min_width,
@@ -41,6 +43,11 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
 }
 
 RectangleVisualizer::~RectangleVisualizer() {
+    // Wait for solver thread to finish before destroying
+    if (solver_thread.joinable()) {
+        solver_thread.join();
+    }
+
     if (initialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -137,23 +144,46 @@ void RectangleVisualizer::generateRandomProblem() {
 }
 
 void RectangleVisualizer::runSolver() {
-    if (gui_config.neighborhood_strategy == 0) {
-        // Geometry Based
-        if (!geometry_solver) {
-            geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
-        }
-        auto result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
-        current_placements = result;
-        problem.set_current_solution(result);
-    } else {
-        // Permutation Based
-        if (!permutation_solver) {
-            permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
-        }
-        auto result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
-        current_placements = result;
-        problem.set_current_solution(result);
+    // Prevent multiple solver threads
+    if (is_solving || solver_thread_active) {
+        return;
     }
+
+    // Join previous thread if it exists
+    if (solver_thread.joinable()) {
+        solver_thread.join();
+    }
+
+    is_solving = true;
+    solver_thread_active = true;
+
+    // Launch solver in separate thread
+    solver_thread = std::thread([this]() {
+        std::vector<RectanglePlacement> result;
+
+        if (gui_config.neighborhood_strategy == 0) {
+            // Geometry Based
+            if (!geometry_solver) {
+                geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+            }
+            result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+        } else {
+            // Permutation Based
+            if (!permutation_solver) {
+                permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+            }
+            result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+        }
+
+        // Thread-safe update of results
+        {
+            std::lock_guard<std::mutex> lock(solver_mutex);
+            pending_result = result;
+        }
+
+        is_solving = false;
+        solver_thread_active = false;
+    });
 }
 
 void RectangleVisualizer::solveNextStep() {
@@ -193,6 +223,16 @@ void RectangleVisualizer::pollEvents() {
 
 void RectangleVisualizer::render() {
     if (!initialized || !window) return;
+
+    // Check if solver has finished and update results
+    if (!is_solving && !solver_thread_active) {
+        std::lock_guard<std::mutex> lock(solver_mutex);
+        if (!pending_result.empty()) {
+            current_placements = pending_result;
+            problem.set_current_solution(pending_result);
+            pending_result.clear();
+        }
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -308,14 +348,6 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
     if (ImGui::Button("Generate Random Problem")) generateRandomProblem();
     ImGui::SameLine();
-    //if (ImGui::Button("Clear")) {
-    //    current_placements.clear();
-    //    original_placements.clear();
-    //    gui_config.current_box_view=0;
-    //    problem = RectangleFittingProblem(gui_config.box_size,std::vector<RectanglePlacement>());
-    //    geometry_solver.reset();
-    //    permutation_solver.reset();
-    //}
 
     ImGui::Separator();
     ImGui::Text("Solver Strategy:");
@@ -329,11 +361,26 @@ void RectangleVisualizer::render() {
     ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
 
     ImGui::Separator();
+
+    // Disable buttons while solving
+    ImGui::BeginDisabled(is_solving);
     if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
     if (ImGui::Button("Run Solver")) runSolver();
     ImGui::SameLine();
     if (ImGui::Button("Revert")) revertToOriginal();
+    ImGui::EndDisabled();
+
+    // Show animated "Calculating" message while solving
+    if (is_solving) {
+        ImGui::Separator();
+        int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
+        std::string calculating_text = "Calculating";
+        for (int i = 0; i < dot_count; i++) {
+            calculating_text += ".";
+        }
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", calculating_text.c_str());
+    }
 
     ImGui::Separator();
     ImGui::Text("Statistics:");

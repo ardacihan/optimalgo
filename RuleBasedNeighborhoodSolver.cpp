@@ -275,7 +275,7 @@ RuleBasedNeighborhoodSolver::solve_with_reruns(RectangleFittingProblem &problem,
             auto coverage = problem.get_coverage_each_bounding_box();
             std::vector<RectanglePlacement> remaining_solution;
             int total_box_area = L * L;
-            int threshold = total_box_area * 0.7;
+            int threshold = total_box_area * 0.75;
 
             for (const auto& placement : merged) {
                 if (coverage[placement.box_id] <= threshold) {
