@@ -1,7 +1,3 @@
-//
-// Solver.h
-//
-
 #ifndef GEOMATRYBASEDNEIGHBORHOODSOLVER_H
 #define GEOMATRYBASEDNEIGHBORHOODSOLVER_H
 
@@ -10,18 +6,10 @@
 
 #include "Solver.h"
 
-class GeometryBasedNeighborhoodSolver : Solver {
-public:
-    std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem);
-
-    std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int max_steps, int reruns_left);
-
-    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem);
-
-    std::vector<RectanglePlacement> solve_one_step_recursive(RectangleFittingProblem &problem);
-
-private:
-    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
+class GeometryBasedNeighborhoodSolver : public Solver {
+protected:
+    std::vector<std::vector<RectanglePlacement>> construct_neighbors(
+        RectangleFittingProblem &problem) override;
 };
 
 #endif //  GEOMATRYBASEDNEIGHBORHOODSOLVER_H

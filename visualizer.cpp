@@ -333,9 +333,9 @@ void RectangleVisualizer::render() {
     ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,20);
     if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
     ImGui::SliderInt("Min Width",&gui_config.min_width,1,box_length);
-    ImGui::SliderInt("Max Width",&gui_config.max_width,gui_config.min_width,box_length);
+    ImGui::SliderInt("Max Width",&gui_config.max_width,std::ranges::min(gui_config.min_width+4,box_length),box_length);
     ImGui::SliderInt("Min Height",&gui_config.min_height,1,box_length);
-    ImGui::SliderInt("Max Height",&gui_config.max_height,gui_config.min_height,box_length);
+    ImGui::SliderInt("Max Height",&gui_config.max_height,std::ranges::min(gui_config.min_width+4,box_length),box_length);
 
     ImGui::Separator();
     ImGui::Text("Box Viewing:");
@@ -358,10 +358,10 @@ void RectangleVisualizer::render() {
     const char* strategies[] = { "Geometry Based", "Permutation Based" };
     ImGui::Combo("Neighborhood Strategy", &gui_config.neighborhood_strategy, strategies, IM_ARRAYSIZE(strategies));
 
-    ImGui::Separator();
-    ImGui::Text("Solver Parameters:");
-    ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,5);
-    ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
+    //ImGui::Separator(); TODO maybe add later after calibrating
+    //ImGui::Text("Solver Parameters:");
+    //ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,5);
+    //ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
 
     ImGui::Separator();
 
