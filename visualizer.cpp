@@ -214,9 +214,7 @@ void RectangleVisualizer::revertToOriginal() {
         current_placements = original_placements;
         problem = RectangleFittingProblem(gui_config.box_size, original_placements);
         setPlacements(original_placements);
-        std::cout << "Reverted to original problem state" << std::endl;
-    } else {
-        std::cout << "No original state saved to revert to" << std::endl;
+        //std::cout << "Reverted to original problem state" << std::endl;
     }
 }
 

@@ -18,17 +18,17 @@
 #include "RuleBasedNeighborhoodSolver.h"
 
 struct GUIConfig {
-    int rect_count = 10;
-    int box_size = 15;
-    int min_width = 5;
-    int max_width = 8;
-    int min_height = 5;
-    int max_height = 8;
+    int rect_count = 1000;
+    int box_size = 20;
+    int min_width = 1;
+    int max_width = 5;
+    int min_height = 1;
+    int max_height = 5;
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
-    int num_reruns = 5;
-    int max_rectangle_in_subproblem = 60;
+    int num_reruns = 10;
+    int max_rectangle_in_subproblem = 100;
 
     // Strategy selection
     int neighborhood_strategy = 0; // 0 = Geometry Based, 1 = Permutation Based

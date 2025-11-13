@@ -7,10 +7,10 @@
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
     const int BIG = 10000;
     const int PENALTY = 500;
-    const int TOUCH_BONUS = 50;
+    const int TOUCH_BONUS = 500;
     const int SPARSE_BOX_PENALTY = 50;
     const int FRAGMENTATION_PENALTY = 50;
-    const double UTIL_REWARD_EXP = 3.5; // exponential growth for all utilization levels
+    const double UTIL_REWARD_EXP = 6; // exponential growth for all utilization levels
 
     std::unordered_set<int> boxes;
     for (auto& r : current_solution) boxes.insert(r.box_id);
