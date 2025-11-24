@@ -2,24 +2,20 @@
 #include <algorithm>
 #include <complex>
 #include <map>
-#include <iostream>
 #include <climits>
 #include <cmath>
 
-// Original objective function (maintains backward compatibility)
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
-    // Call the new temperature-dependent version with T=1000 (no overlap penalty)
     return objective(current_solution, 1000);
 }
 
-// New temperature-dependent objective function
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
     const int BIG = 10000;
     const int PENALTY = 5000;
-    const int TOUCH_BONUS = 500;
+    const int TOUCH_BONUS = 1000;
     const int SPARSE_BOX_PENALTY = 50;
     const int FRAGMENTATION_PENALTY = 50;
-    const double UTIL_REWARD_EXP = 6; // exponential growth for all utilization levels
+    const double UTIL_REWARD_EXP = 10;
 
     std::unordered_set<int> boxes;
     for (auto& r : current_solution) boxes.insert(r.box_id);
@@ -28,12 +24,10 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     long long overlap_penalty = 0;
     long long touch_bonus = 0;
 
-    // Calculate overlap penalty based on temperature
     for (size_t i = 0; i < current_solution.size(); ++i) {
         for (size_t j = i + 1; j < current_solution.size(); ++j) {
             if (current_solution[i].box_id != current_solution[j].box_id) continue;
 
-            // Calculate overlap area
             const auto& r1 = current_solution[i];
             const auto& r2 = current_solution[j];
             int overlap_x1 = std::max(r1.x, r2.x);
@@ -47,10 +41,8 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
                 int area2 = r2.get_actual_width() * r2.get_actual_height();
                 double max_rect_area = std::max(area1, area2);
 
-                // Calculate overlap ratio as specified in assignment
                 double overlap_ratio = (double)overlap_area / max_rect_area;
 
-                // Temperature-dependent penalty: at T=1000: penalty=0, at T=0: full penalty
                 double temperature_factor = 1.0 - (T / 1000.0);
                 double penalty_weight = overlap_ratio * temperature_factor * temperature_factor;
 
@@ -80,7 +72,6 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         double util = (double)used_area / (double)box_area;
         unused += (box_area - used_area);
 
-        // Reward all coverage exponentially, not just high util
         utilization_reward += std::pow(util, UTIL_REWARD_EXP) * 15000.0;
 
         if (used_area * 100 < box_area * 30) sparse_penalty += SPARSE_BOX_PENALTY;
@@ -105,20 +96,13 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     }
 
     long long score = -(long long)num_boxes * BIG;
-    score -= overlap_penalty;  // Now temperature-dependent
+    score -= overlap_penalty;
     score -= unused / 100;
     score += touch_bonus * TOUCH_BONUS;
     score -= sparse_penalty;
     score -= fragmentation * FRAGMENTATION_PENALTY;
 
-    // Reward higher coverage in every box exponentially
     score += (long long)utilization_reward;
-
-    // Debug output for temperature changes
-    if (T < 1000 && T > 0) {
-        std::cout << "T=" << T << " | Overlap penalty: " << overlap_penalty
-                  << " | Boxes: " << num_boxes << " | Score: " << score << std::endl;
-    }
 
     if (score > INT_MAX) return INT_MAX;
     if (score < INT_MIN) return INT_MIN;
@@ -126,7 +110,6 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 }
 
 int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement> &current_solution) {
-    // For backward compatibility, call the original objective
     return objective(current_solution);
 }
 
@@ -153,9 +136,6 @@ bool RectangleFittingProblem::check_within_boxes(const std::vector<RectanglePlac
         double bottom = rect.y + rect.get_actual_height();
 
         if (rect.x < 0 || rect.y < 0 || right > L || bottom > L) {
-            std::cout << "Rectangle out of bounds: (" << rect.x << ", " << rect.y
-                      << ") to (" << right << ", " << bottom << ") in box [0,0] to ["
-                      << L << "," << L << "]\n";
             return false;
         }
     }

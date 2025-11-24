@@ -18,7 +18,7 @@ std::vector<std::vector<RectanglePlacement>> GeometryBasedNeighborhoodSolver::co
     int n = solution.size();
     if (n == 0) return nbs;
 
-    int MAX_NEIGHBORS = 140;
+    int MAX_NEIGHBORS = 200;
     nbs.reserve(MAX_NEIGHBORS);
 
     int avg_size_sq = 0;

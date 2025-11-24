@@ -21,15 +21,15 @@
 struct GUIConfig {
     int rect_count = 1000;
     int box_size = 20;
-    int min_width = 5;
-    int max_width = 9;
-    int min_height = 5;
-    int max_height = 9;
+    int min_width = 3;
+    int max_width = 7;
+    int min_height = 3;
+    int max_height = 7;
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
-    int num_reruns = 10;
-    int max_rectangle_in_subproblem = 100;
+    int num_reruns = 5;
+    int max_rectangle_in_subproblem = 50;
 
     // Strategy selection
     int neighborhood_strategy = 2; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based

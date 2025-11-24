@@ -120,7 +120,7 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 80;
+    const int MAX_NEIGHBORS = 200;
 
     if (n == 0) return neighbors;
 

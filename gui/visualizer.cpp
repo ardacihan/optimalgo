@@ -1,5 +1,4 @@
 #include "visualizer.h"
-#include <iostream>
 #include <algorithm>
 #include <unordered_set>
 #include <sstream>
@@ -21,7 +20,6 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
       problem(gui_config.box_size, std::vector<RectanglePlacement>()) {
 
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
         return;
     }
 
@@ -37,7 +35,6 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
 
     window = glfwCreateWindow(width, height, "Rectangle Packing Visualization", nullptr, nullptr);
     if (!window) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return;
     }
@@ -47,7 +44,6 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
 }
 
 RectangleVisualizer::~RectangleVisualizer() {
-    // Wait for solver thread to finish before destroying
     if (solver_thread.joinable()) {
         solver_thread.join();
     }
@@ -66,7 +62,6 @@ RectangleVisualizer::~RectangleVisualizer() {
 
 bool RectangleVisualizer::initialize() {
     if (!window) {
-        std::cerr << "No window created" << std::endl;
         return false;
     }
 
@@ -76,12 +71,10 @@ bool RectangleVisualizer::initialize() {
     ImGui::StyleColorsDark();
 
     if (!ImGui_ImplGlfw_InitForOpenGL(static_cast<GLFWwindow*>(window), true)) {
-        std::cerr << "Failed to initialize ImGui GLFW backend" << std::endl;
         return false;
     }
 
     if (!ImGui_ImplOpenGL3_Init("#version 330")) {
-        std::cerr << "Failed to initialize ImGui OpenGL backend" << std::endl;
         return false;
     }
 
@@ -145,18 +138,14 @@ void RectangleVisualizer::generateInstance() {
 
 void RectangleVisualizer::generateRandomProblem() {
     generateInstance();
-    // Reset relaxed solver temperature when generating new problem
     reset_relaxed_temperature();
-    std::cout << "Generated new problem and reset temperature to 1000" << std::endl;
 }
 
 void RectangleVisualizer::runSolver() {
-    // Prevent multiple solver threads
     if (is_solving || solver_thread_active) {
         return;
     }
 
-    // Join previous thread if it exists
     if (solver_thread.joinable()) {
         solver_thread.join();
     }
@@ -165,40 +154,27 @@ void RectangleVisualizer::runSolver() {
     solver_thread_active = true;
     solver_start_time = std::chrono::steady_clock::now();
 
-    // Launch solver in separate thread
     solver_thread = std::thread([this]() {
         std::vector<RectanglePlacement> result;
 
         if (gui_config.neighborhood_strategy == 0) {
-            // Geometry Based
             if (!geometry_solver) {
                 geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
-                std::cout << "Initialized Geometry Based Solver" << std::endl;
             }
             result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
         } else if (gui_config.neighborhood_strategy == 1){
-            // Permutation Based
             if (!permutation_solver) {
                 permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
-                std::cout << "Initialized Permutation Based Solver" << std::endl;
             }
             result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
         } else {
-            // Relaxed Geometry Based
             if (!relaxed_geometry_solver) {
                 relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
-                std::cout << "Initialized Relaxed Geometry Based Solver" << std::endl;
             }
-            // For full solve, use decreasing temperature starting from current temperature
-            int start_temp = 1000; // Start from maximum temperature for full solve
-            std::cout << "Starting full solve with temperature: " << start_temp << std::endl;
-
-            // We need to modify the solver to handle temperature internally for full solves
-            // For now, just use the solver with default temperature handling
+            reset_relaxed_temperature();
             result = relaxed_geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
         }
 
-        // Thread-safe update of results
         {
             std::lock_guard<std::mutex> lock(solver_mutex);
             pending_result = result;
@@ -210,55 +186,28 @@ void RectangleVisualizer::runSolver() {
 }
 
 void RectangleVisualizer::solveNextStep() {
-    static int current_temperature = 1000;
-
     if (gui_config.neighborhood_strategy == 0) {
-        // Geometry Based - use default objective (T=1000)
         if (!geometry_solver) {
             geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
         }
-        auto result = geometry_solver->solve_one_step(problem); // Uses default objective
+        auto result = geometry_solver->solve_one_step(problem);
         current_placements = result;
         problem.set_current_solution(result);
     } else if (gui_config.neighborhood_strategy == 1){
-        // Permutation Based - use default objective (T=1000)
         if (!permutation_solver) {
             permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
         }
-        auto result = permutation_solver->solve_one_step(problem); // Uses default objective
+        auto result = permutation_solver->solve_one_step(problem);
         current_placements = result;
         problem.set_current_solution(result);
     } else {
-        // Relaxed Geometry Based - use decreasing temperature
         if (!relaxed_geometry_solver) {
             relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
-            std::cout << "Initialized Relaxed Geometry Based Solver" << std::endl;
         }
-        auto result = relaxed_geometry_solver->solve_one_step(problem, current_temperature);
+        auto result = relaxed_geometry_solver->solve_one_step(problem);
         current_placements = result;
         problem.set_current_solution(result);
-
-        // Decrease temperature for next step
-        if (current_temperature > 0) {
-            current_temperature = std::max(0, current_temperature - 100);
-            std::cout << "Temperature decreased to: " << current_temperature << std::endl;
-        }
     }
-
-    // Check current solution for overlaps
-    int overlap_count = 0;
-    for (size_t i = 0; i < current_placements.size(); i++) {
-        for (size_t j = i + 1; j < current_placements.size(); j++) {
-            if (current_placements[i].box_id != current_placements[j].box_id) continue;
-            if (!(current_placements[i].x >= current_placements[j].x + current_placements[j].get_actual_width() ||
-                  current_placements[i].x + current_placements[i].get_actual_width() <= current_placements[j].x ||
-                  current_placements[i].y >= current_placements[j].y + current_placements[j].get_actual_height() ||
-                  current_placements[i].y + current_placements[i].get_actual_height() <= current_placements[j].y)) {
-                overlap_count++;
-            }
-        }
-    }
-    std::cout << "Current solution has " << overlap_count << " overlaps" << std::endl;
 }
 
 void RectangleVisualizer::revertToOriginal() {
@@ -266,9 +215,7 @@ void RectangleVisualizer::revertToOriginal() {
         current_placements = original_placements;
         problem = RectangleFittingProblem(gui_config.box_size, original_placements);
         setPlacements(original_placements);
-        // Reset temperature when reverting to original
         reset_relaxed_temperature();
-        std::cout << "Reverted to original problem state and reset temperature" << std::endl;
     }
 }
 
@@ -279,7 +226,6 @@ void RectangleVisualizer::pollEvents() {
 void RectangleVisualizer::render() {
     if (!initialized || !window) return;
 
-    // Check if solver has finished and update results
     if (!is_solving && !solver_thread_active) {
         std::lock_guard<std::mutex> lock(solver_mutex);
         if (!pending_result.empty()) {
@@ -410,24 +356,8 @@ void RectangleVisualizer::render() {
     const char* strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
     ImGui::Combo("Neighborhood Strategy", &gui_config.neighborhood_strategy, strategies, IM_ARRAYSIZE(strategies));
 
-    // Show current temperature for relaxed solver
-    if (gui_config.neighborhood_strategy == 2) {
-        static int current_temp_display = 1000;
-        ImGui::Text("Current Temperature: %d/1000", current_temp_display);
-        if (ImGui::Button("Reset Temperature")) {
-            reset_relaxed_temperature();
-            current_temp_display = 1000;
-        }
-    }
-
-    //ImGui::Separator(); TODO maybe add later after calibrating
-    //ImGui::Text("Solver Parameters:");
-    //ImGui::SliderInt("Number of Reruns",&gui_config.num_reruns,1,5);
-    //ImGui::SliderInt("Max Rectangles in Subproblem",&gui_config.max_rectangle_in_subproblem,10,100);
-
     ImGui::Separator();
 
-    // Disable buttons while solving
     ImGui::BeginDisabled(is_solving);
     if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
@@ -436,27 +366,22 @@ void RectangleVisualizer::render() {
     if (ImGui::Button("Revert")) revertToOriginal();
     ImGui::EndDisabled();
 
-    // Show animated "Calculating" message with timer while solving
     if (is_solving) {
         ImGui::Separator();
 
-        // Calculate elapsed time
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - solver_start_time);
 
-        // Format time as MM:SS
         std::ostringstream time_ss;
         time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
                 << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
 
-        // Animated dots
         int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
         std::string calculating_text = "Calculating";
         for (int i = 0; i < dot_count; i++) {
             calculating_text += ".";
         }
 
-        // Display with timer
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", calculating_text.c_str());
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());

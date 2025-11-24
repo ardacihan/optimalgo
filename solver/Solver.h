@@ -1,6 +1,6 @@
 //
 // Solver.h
-// Base class for rectangle packing solvers with common divide-and-conquer logic
+// Base class for rectangle packing solvers with "Filter & Rerun" optimization
 //
 
 #ifndef OPTIMALGO_SOLVER_H
@@ -11,115 +11,108 @@
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
+#include <limits>
+#include <cmath>
+
+// Forward declaration assuming this class exists in your project
+// class RectangleFittingProblem;
+// struct RectanglePlacement;
 
 class Solver {
 public:
     virtual ~Solver() = default;
 
-    // Main entry point - delegates to solve_with_reruns
+    /**
+     * Main entry point.
+     * Delegates to the recursive logic.
+     */
     std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem,
                                           int num_reruns,
                                           int max_rectangle_in_subproblem) {
         return solve_with_reruns(problem, num_reruns, max_rectangle_in_subproblem);
     }
 
-    // Recursive divide-and-conquer solver with optimization passes
+    /**
+     * Recursive Divide-and-Conquer Solver with Optimization Reruns.
+     * * Logic Flow:
+     * 1. Check if problem is small (Leaf) or large (Node).
+     * 2. If Leaf: Run Local Search (Hill Climbing).
+     * 3. If Node: Split problem, recurse left/right, merge.
+     * 4. Post-Process: "Filter & Rerun"
+     * - Identify boxes with low utilization.
+     * - 'Freeze' good boxes.
+     * - 'Melt' bad boxes and solve them again as a fresh group.
+     */
     std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem,
                                                       int num_reruns,
                                                       int max_rectangle_in_subproblem) {
-        std::vector<RectanglePlacement> solution = problem.get_current_solution();
 
-        if (num_reruns <= 0) return solution;
+        std::vector<RectanglePlacement> current_solution = problem.get_current_solution();
 
-        std::unordered_set<int> box_ids;
-        for (const auto& placement : solution) {
-            box_ids.insert(placement.box_id);
+        // 0. Base Case: If no reruns allowed, we return whatever the problem has (likely greedy result)
+        if (num_reruns < 0) return current_solution;
+
+        // Determine problem size
+        std::unordered_set<int> unique_boxes;
+        for (const auto& p : current_solution) unique_boxes.insert(p.box_id);
+
+        int num_boxes = unique_boxes.size();
+        int num_rectangles = current_solution.size();
+
+        // Stop criteria for splitting: few boxes OR few rectangles
+        bool is_small_subproblem = (num_boxes <= 2) || (num_rectangles < max_rectangle_in_subproblem);
+
+        std::vector<RectanglePlacement> intermediate_result;
+
+        // --- PHASE 1: Generate Solution (Local Search vs Divide & Conquer) ---
+
+        if (is_small_subproblem) {
+            // LEAF NODE: Apply Local Search
+            intermediate_result = apply_local_search(problem, current_solution);
         }
-
-        int num_boxes = box_ids.size();
-        int num_rectangles = solution.size();
-
-        // UPDATED: Stop criteria - either few boxes OR few rectangles
-        // This prevents premature termination when you have many poorly-utilized boxes
-        bool small_enough = (num_boxes <= 2) || (num_rectangles < max_rectangle_in_subproblem);
-
-        // A. Subproblem size is small enough: Apply local search
-        if (small_enough) {
-            auto neighbors = construct_neighbors(problem);
-            if (neighbors.empty()) {
-                std::cout << "No neighbors generated, stopping." << std::endl;
-                return solution;
-            }
-
-            // Use temperature if available (for relaxed solver)
-            int current_obj = problem.objective(solution);
-            std::vector<RectanglePlacement> best_neighbor = solution;
-            int best_obj = current_obj;
-
-            for (auto &n : neighbors) {
-                int obj = problem.objective(n);  // Regular solvers use default objective
-                if (obj > best_obj) {
-                    best_obj = obj;
-                    best_neighbor = n;
-                }
-            }
-
-            if (best_obj > current_obj) {
-                // Continue local search with the new, better solution
-                problem.set_current_solution(best_neighbor);
-                return solve_with_reruns(problem, num_reruns, max_rectangle_in_subproblem);
-            } else {
-                // Local optimum reached
-                return solution;
-            }
-        }
-
-
-        // B. Subproblem is too large: Divide-and-Conquer
         else {
-            // --- Divide ---
-            auto [left, right] = splitRectanglesByBoxId(solution);
+            // INTERNAL NODE: Divide and Conquer
+            auto [left, right] = split_rectangles_by_box_id(current_solution);
             int L = problem.get_box_length();
 
+            // Create sub-problems
             RectangleFittingProblem p1(L, left);
             RectangleFittingProblem p2(L, right);
 
-            // --- Conquer (Recursive Calls) ---
+            // Recurse (Note: we pass num_reruns down, but the real cost happens in Phase 2)
             auto solved_left = solve_with_reruns(p1, num_reruns, max_rectangle_in_subproblem);
             auto solved_right = solve_with_reruns(p2, num_reruns, max_rectangle_in_subproblem);
 
-            // --- Merge ---
-            // REMAP BOX IDs to avoid conflicts when merging
-            int max_left_id = 0;
-            for (const auto& placement : solved_left) {
-                max_left_id = std::max(max_left_id, placement.box_id);
-            }
-            auto remapped_right = remap_box_ids(solved_right, max_left_id + 1);
-
-            std::vector<RectanglePlacement> merged = solved_left;
-            merged.insert(merged.end(), remapped_right.begin(), remapped_right.end());
-
-            // --- Optimize Merged Solution ---
-            if (num_reruns > 0) {
-                return optimize_merged_solution(merged, L, num_reruns, max_rectangle_in_subproblem);
-            }
-
-            problem.set_current_solution(merged);
-            return merged;
+            // Merge
+            intermediate_result = safe_merge(solved_left, solved_right);
         }
+
+        // --- PHASE 2: The Optimization Rerun ---
+        // If we have reruns left, we check for inefficiency and redo the bad parts.
+
+        if (num_reruns > 0) {
+            return filter_and_rerun(intermediate_result,
+                                    problem.get_box_length(),
+                                    num_reruns - 1,
+                                    max_rectangle_in_subproblem);
+        }
+
+        return intermediate_result;
     }
 
-    // Single step optimization (for iterative/GUI use)
+    /**
+     * Single step optimization (useful for visualization/GUI stepping).
+     */
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {
         std::vector<RectanglePlacement> solution = problem.get_current_solution();
-
         auto neighbors = construct_neighbors(problem);
+
         if (neighbors.empty()) {
-            std::cout << "No neighbors generated." << std::endl;
+            // std::cout << "No neighbors generated." << std::endl;
             return solution;
         }
 
-        // Use temperature-dependent objective for relaxed solver, default for others
+        // T < 1000 implies Simulated Annealing context, otherwise greedy
         int current_obj = (T < 1000) ? problem.objective(solution, T) : problem.objective(solution);
         std::vector<RectanglePlacement> best_neighbor = solution;
         int best_obj = current_obj;
@@ -133,282 +126,166 @@ public:
         }
 
         if (best_obj > current_obj) {
-            std::cout << "Accepted improving move: " << current_obj << " -> " << best_obj;
-            if (T < 1000) std::cout << " (T=" << T << ")";
-            std::cout << std::endl;
-        } else {
-            std::cout << "No improving move found";
-            if (T < 1000) std::cout << " (T=" << T << ")";
-            std::cout << std::endl;
+            problem.set_current_solution(best_neighbor);
+            return best_neighbor;
         }
-
-        problem.set_current_solution(best_neighbor);
-        return best_neighbor;
+        return solution;
     }
 
-
 protected:
-    // Pure virtual - each solver implements its own neighborhood structure
+    // Pure virtual: Subclasses must define how to find neighbor solutions
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem) = 0;
 
-    // Utilization threshold for filtering well-utilized boxes
-    // Subclasses can override this if needed
+    // Threshold for "Good" boxes. Boxes filled > this % are kept as-is.
     virtual double get_utilization_threshold() const {
         return 0.75;
     }
 
-    // Split rectangles by box ID into two balanced groups
-    std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
-    splitRectanglesByBoxId(const std::vector<RectanglePlacement>& solution) {
-        std::vector<RectanglePlacement> left, right;
+private:
+    // --- Phase 1 Helpers ---
 
-        if (solution.empty()) return {left, right};
+    std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
+                                                       std::vector<RectanglePlacement> initial) {
+        auto neighbors = construct_neighbors(problem);
+        if (neighbors.empty()) return initial;
 
-        // Find all unique box IDs
-        std::unordered_set<int> box_ids;
-        for (const auto& placement : solution) {
-            box_ids.insert(placement.box_id);
-        }
+        int current_obj = problem.objective(initial);
+        std::vector<RectanglePlacement> best_sol = initial;
+        int best_obj = current_obj;
 
-        // Split boxes into two groups
-        std::vector<int> sorted_box_ids(box_ids.begin(), box_ids.end());
-        std::sort(sorted_box_ids.begin(), sorted_box_ids.end());
-
-        int mid = sorted_box_ids.size() / 2;
-
-        std::unordered_set<int> left_box_ids, right_box_ids;
-        for (int i = 0; i < mid; i++) {
-            left_box_ids.insert(sorted_box_ids[i]);
-        }
-        for (size_t i = mid; i < sorted_box_ids.size(); i++) {
-            right_box_ids.insert(sorted_box_ids[i]);
-        }
-
-        // Assign rectangles to left or right based on their box ID
-        for (const auto& placement : solution) {
-            if (left_box_ids.count(placement.box_id)) {
-                left.push_back(placement);
-            } else {
-                right.push_back(placement);
+        for (auto &n : neighbors) {
+            int obj = problem.objective(n);
+            if (obj > best_obj) {
+                best_obj = obj;
+                best_sol = n;
             }
         }
 
+        // If we found a better neighbor, update the problem state
+        if (best_obj > current_obj) {
+            problem.set_current_solution(best_sol);
+            return best_sol;
+        }
+        return initial;
+    }
+
+    std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
+    split_rectangles_by_box_id(const std::vector<RectanglePlacement>& solution) {
+        std::vector<RectanglePlacement> left, right;
+        if (solution.empty()) return {left, right};
+
+        std::unordered_set<int> box_ids;
+        for (const auto& p : solution) box_ids.insert(p.box_id);
+
+        std::vector<int> sorted_ids(box_ids.begin(), box_ids.end());
+        std::sort(sorted_ids.begin(), sorted_ids.end());
+
+        // Split unique boxes in half
+        int mid = sorted_ids.size() / 2;
+        std::unordered_set<int> left_set;
+        for(int i = 0; i < mid; ++i) left_set.insert(sorted_ids[i]);
+
+        for (const auto& p : solution) {
+            if (left_set.count(p.box_id)) left.push_back(p);
+            else right.push_back(p);
+        }
         return {left, right};
     }
 
-    // Remap box IDs to avoid conflicts when merging solutions
-    std::vector<RectanglePlacement> remap_box_ids(
-        const std::vector<RectanglePlacement>& solution,
-        int start_id) {
+    // --- Phase 2 Helpers (The Fix) ---
 
-        std::vector<RectanglePlacement> result;
-        std::unordered_map<int, int> id_mapping;
-        int next_id = start_id;
+    /**
+     * Identifies poorly utilized boxes, strips their identities, and reruns the solver
+     * on just those rectangles. Combines the result with the "Good" boxes.
+     */
+    std::vector<RectanglePlacement> filter_and_rerun(const std::vector<RectanglePlacement>& full_solution,
+                                                     int L,
+                                                     int remaining_reruns,
+                                                     int max_rect_sub) {
 
-        for (const auto& placement : solution) {
-            if (id_mapping.find(placement.box_id) == id_mapping.end()) {
-                id_mapping[placement.box_id] = next_id++;
-            }
-            int new_box_id = id_mapping[placement.box_id];
-            result.emplace_back(placement.width, placement.height, placement.x, placement.y,
-                               placement.rotated, new_box_id);
-        }
-
-        return result;
-    }
-
-private:
-    // Group poorly-utilized boxes together with constraints on both utilization and rectangle count
-    std::vector<std::vector<int>> group_boxes_by_combined_utilization(
-        const std::unordered_map<int, long long>& box_areas,
-        const std::unordered_map<int, int>& box_rect_counts,
-        long long box_capacity,
-        int max_rectangles_per_group,
-        double combined_threshold = 0.80) {
-
-        std::vector<std::vector<int>> groups;
-
-        // Sort boxes by area (smallest first for better grouping)
-        std::vector<std::pair<int, long long>> sorted_boxes;
-        for (const auto& [box_id, area] : box_areas) {
-            double utilization = (double)area / (double)box_capacity;
-            // Only group boxes with low utilization
-            if (utilization < get_utilization_threshold()) {
-                sorted_boxes.push_back({box_id, area});
-            }
-        }
-
-        std::sort(sorted_boxes.begin(), sorted_boxes.end(),
-                  [](const auto& a, const auto& b) { return a.second < b.second; });
-
-        std::vector<bool> used(sorted_boxes.size(), false);
-
-        // Greedy grouping: try to combine boxes up to BOTH thresholds
-        for (size_t i = 0; i < sorted_boxes.size(); i++) {
-            if (used[i]) continue;
-
-            std::vector<int> current_group;
-            long long combined_area = 0;
-            int combined_rect_count = 0;
-
-            current_group.push_back(sorted_boxes[i].first);
-            combined_area += sorted_boxes[i].second;
-            combined_rect_count += box_rect_counts.at(sorted_boxes[i].first);
-            used[i] = true;
-
-            // Try to add more boxes to this group
-            for (size_t j = i + 1; j < sorted_boxes.size(); j++) {
-                if (used[j]) continue;
-
-                int box_id_j = sorted_boxes[j].first;
-                long long potential_area = combined_area + sorted_boxes[j].second;
-                int potential_rect_count = combined_rect_count + box_rect_counts.at(box_id_j);
-                double potential_utilization = (double)potential_area / (double)box_capacity;
-
-                // CHECK BOTH: utilization threshold AND rectangle count limit
-                if (potential_utilization <= combined_threshold &&
-                    potential_rect_count <= max_rectangles_per_group) {
-                    current_group.push_back(box_id_j);
-                    combined_area += sorted_boxes[j].second;
-                    combined_rect_count += box_rect_counts.at(box_id_j);
-                    used[j] = true;
-                }
-            }
-
-            // Only add group if it has 2+ boxes
-            if (current_group.size() >= 2) {
-                groups.push_back(current_group);
-            }
-        }
-
-        return groups;
-    }
-
-    // Optimize merged solution by grouping poorly-utilized boxes and re-optimizing them
-    std::vector<RectanglePlacement> optimize_merged_solution(
-        const std::vector<RectanglePlacement>& merged,
-        int L,
-        int num_reruns,
-        int max_rectangle_in_subproblem) {
-
-        // Create a new problem with the merged solution
-        RectangleFittingProblem merged_problem(L, merged);
-
-        // Calculate coverage for each box
-        auto coverage = merged_problem.get_coverage_each_bounding_box();
-
-        // Group boxes by their ID and calculate total areas AND rectangle counts
+        // 1. Calculate Area per Box
         std::unordered_map<int, long long> box_areas;
-        std::unordered_map<int, int> box_rect_counts;
-        for (const auto& placement : merged) {
-            box_areas[placement.box_id] = coverage[placement.box_id];
-            box_rect_counts[placement.box_id]++;
+        for (const auto& p : full_solution) {
+            box_areas[p.box_id] += (long long)p.width * p.height;
         }
 
         long long box_capacity = (long long)L * L;
-        double utilization_threshold = get_utilization_threshold();
+        double threshold = get_utilization_threshold();
 
-        // Separate well-utilized and poorly-utilized rectangles
-        std::vector<RectanglePlacement> well_utilized_rectangles;
-        std::unordered_set<int> poorly_utilized_box_ids;
+        std::vector<RectanglePlacement> kept_good_rects;
+        std::vector<RectanglePlacement> retry_bad_rects;
 
-        for (const auto& [box_id, area] : box_areas) {
-            double util = (double)area / (double)box_capacity;
-            if (util < utilization_threshold) {
-                poorly_utilized_box_ids.insert(box_id);
-            }
-        }
+        // 2. Filter: High Util -> Keep, Low Util -> Retry
+        for (const auto& p : full_solution) {
+            double util = (double)box_areas[p.box_id] / (double)box_capacity;
 
-        std::vector<RectanglePlacement> poorly_utilized_rectangles;
-        for (const auto& placement : merged) {
-            if (poorly_utilized_box_ids.count(placement.box_id)) {
-                poorly_utilized_rectangles.push_back(placement);
+            if (util >= threshold) {
+                kept_good_rects.push_back(p);
             } else {
-                well_utilized_rectangles.push_back(placement);
+                retry_bad_rects.push_back(p);
             }
         }
 
-        std::cout << "After merging: " << well_utilized_rectangles.size()
-                  << " rectangles in well-utilized boxes (>=" << (utilization_threshold * 100) << "%), "
-                  << poorly_utilized_rectangles.size()
-                  << " rectangles in " << poorly_utilized_box_ids.size()
-                  << " poorly-utilized boxes" << std::endl;
-
-        // Group and optimize poorly-utilized boxes
-        if (!poorly_utilized_rectangles.empty() && num_reruns > 0) {
-            // Try to group poorly-utilized boxes with BOTH utilization and rectangle constraints
-            auto box_groups = group_boxes_by_combined_utilization(
-                box_areas,
-                box_rect_counts,
-                box_capacity,
-                max_rectangle_in_subproblem,  // Pass the rectangle limit!
-                0.80
-            );
-
-            std::cout << "Created " << box_groups.size()
-                      << " optimization groups from poorly-utilized boxes (max "
-                      << max_rectangle_in_subproblem << " rectangles per group)" << std::endl;
-
-            std::vector<RectanglePlacement> optimized_rectangles;
-            std::unordered_set<int> optimized_box_ids;
-
-            // Optimize each group
-            for (size_t g = 0; g < box_groups.size(); g++) {
-                const auto& group = box_groups[g];
-                std::vector<RectanglePlacement> group_rectangles;
-                long long group_total_area = 0;
-
-                for (const auto& placement : poorly_utilized_rectangles) {
-                    if (std::find(group.begin(), group.end(), placement.box_id) != group.end()) {
-                        group_rectangles.push_back(placement);
-                        optimized_box_ids.insert(placement.box_id);
-                    }
-                }
-
-                for (int box_id : group) {
-                    group_total_area += box_areas[box_id];
-                }
-
-                if (!group_rectangles.empty()) {
-                    double group_util = (double)group_total_area / (double)box_capacity;
-                    std::cout << "  Group " << (g+1) << ": optimizing " << group_rectangles.size()
-                              << " rectangles from " << group.size()
-                              << " boxes (combined util: " << (group_util * 100) << "%, "
-                              << "rectangles: " << group_rectangles.size() << ")" << std::endl;
-
-                    RectangleFittingProblem group_problem(L, group_rectangles);
-                    auto optimized_group = solve_with_reruns(group_problem, num_reruns - 1, max_rectangle_in_subproblem);
-                    optimized_rectangles.insert(optimized_rectangles.end(),
-                                               optimized_group.begin(),
-                                               optimized_group.end());
-                }
-            }
-
-            // Add rectangles from boxes that weren't grouped (too large or alone)
-            for (const auto& placement : poorly_utilized_rectangles) {
-                if (!optimized_box_ids.count(placement.box_id)) {
-                    optimized_rectangles.push_back(placement);
-                }
-            }
-
-            // Combine well-utilized boxes with optimized rectangles
-            std::vector<RectanglePlacement> final_solution = well_utilized_rectangles;
-
-            // Remap box IDs for the optimized part to avoid conflicts
-            int final_max_id = 0;
-            for (const auto& placement : final_solution) {
-                final_max_id = std::max(final_max_id, placement.box_id);
-            }
-            auto remapped_optimized = remap_box_ids(optimized_rectangles, final_max_id + 1);
-
-            final_solution.insert(final_solution.end(), remapped_optimized.begin(), remapped_optimized.end());
-
-            return final_solution;
+        // Optimization: If nothing to retry, or everything is bad (avoid infinite loops if no progress), return.
+        if (retry_bad_rects.empty()) {
+            return full_solution;
         }
 
-        // If all boxes are well utilized or no reruns left, return merged solution
+        // If kept_good_rects is empty, it means the whole solution is below threshold.
+        // We still proceed to rerun, relying on remaining_reruns decrement to stop eventual loops.
+
+        std::cout << "Rerun Optimization: Locking " << kept_good_rects.size()
+                  << " rects, Rerunning " << retry_bad_rects.size() << " rects." << std::endl;
+
+        // 3. RERUN: Create a new problem from the "Bad" rectangles.
+        // This implicitly "merges" the bad boxes because the new solver doesn't care about old IDs.
+        RectangleFittingProblem retry_problem(L, retry_bad_rects);
+
+        // Recursive call with decremented reruns
+        auto optimized_bad_part = solve_with_reruns(retry_problem, remaining_reruns, max_rect_sub);
+
+        // 4. Merge the kept good part with the newly optimized part
+        return safe_merge(kept_good_rects, optimized_bad_part);
+    }
+
+    /**
+     * Merges two lists of placements, ensuring Box IDs in the 'right' list
+     * do not conflict with those in the 'left' list.
+     */
+    std::vector<RectanglePlacement> safe_merge(const std::vector<RectanglePlacement>& left,
+                                               const std::vector<RectanglePlacement>& right) {
+        if (left.empty()) return right;
+        if (right.empty()) return left;
+
+        // Find max ID in left
+        int max_left_id = -1;
+        for (const auto& p : left) max_left_id = std::max(max_left_id, p.box_id);
+
+        // Remap right to start after left
+        auto remapped_right = remap_box_ids(right, max_left_id + 1);
+
+        std::vector<RectanglePlacement> merged = left;
+        merged.insert(merged.end(), remapped_right.begin(), remapped_right.end());
         return merged;
+    }
+
+    std::vector<RectanglePlacement> remap_box_ids(const std::vector<RectanglePlacement>& solution,
+                                                  int start_id) {
+        std::vector<RectanglePlacement> result;
+        result.reserve(solution.size());
+
+        std::unordered_map<int, int> id_map;
+        int next_id = start_id;
+
+        for (const auto& p : solution) {
+            if (id_map.find(p.box_id) == id_map.end()) {
+                id_map[p.box_id] = next_id++;
+            }
+            // Construct new placement with updated box_id
+            result.emplace_back(p.width, p.height, p.x, p.y, p.rotated, id_map[p.box_id]);
+        }
+        return result;
     }
 };
 
