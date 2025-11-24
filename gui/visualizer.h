@@ -29,7 +29,7 @@ struct GUIConfig {
     int current_box_view = 0;
     bool show_solver_steps = false;
     int num_reruns = 5;
-    int max_rectangle_in_subproblem = 50;
+    int max_rectangle_in_subproblem = 60;
 
     // Strategy selection
     int neighborhood_strategy = 2; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based

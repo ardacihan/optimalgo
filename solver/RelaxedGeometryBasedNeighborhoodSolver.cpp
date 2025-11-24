@@ -16,6 +16,7 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
 
     auto neighbors = construct_overlapping_neighbors(problem, current_relaxed_temperature);
 
+    // Decrease temperature after generating neighbors
     if (current_relaxed_temperature > 0) {
         current_relaxed_temperature = std::max(0, current_relaxed_temperature - 50);
     }
@@ -32,12 +33,17 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
     int n = solution.size();
     if (n == 0) return nbs;
 
+    // 1. CALCULATE ALLOWED OVERLAP BASED ON TEMPERATURE (T)
+    // As T decreases, allowed_overlap approaches 0 (Hard constraints)
+    long long allowed_overlap_area = calculate_max_overlap_area(T, L);
+
     int MAX_NEIGHBORS = 200;
     nbs.reserve(MAX_NEIGHBORS);
 
     std::random_device rd;
     std::mt19937 gen(rd());
 
+    // --- Box Data Setup (Same as before) ---
     std::unordered_map<int, BoxData> box_data;
     for (int i = 0; i < n; i++) {
         int box_id = solution[i].box_id;
@@ -49,7 +55,7 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
             it = box_data.find(box_id);
         }
         it->second.rect_indices.push_back(i);
-        it->second.total_area += solution[i].get_actual_width() * solution[i].get_actual_height();
+        it->second.total_area += (long long)solution[i].get_actual_width() * solution[i].get_actual_height();
     }
 
     std::vector<std::pair<int, double>> box_utilizations;
@@ -69,34 +75,42 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
         return false;
     };
 
-    auto collides_in_box = [&](const RectanglePlacement& r, int box_id,
-                                const std::vector<RectanglePlacement>& sol, int skip_idx = -1) {
+    // 2. NEW HELPER: Calculate Intersection Area
+    auto calculate_intersection = [&](const RectanglePlacement& r1, const RectanglePlacement& r2) -> long long {
+        int x_overlap = std::max(0, std::min(r1.x + r1.get_actual_width(), r2.x + r2.get_actual_width()) - std::max(r1.x, r2.x));
+        int y_overlap = std::max(0, std::min(r1.y + r1.get_actual_height(), r2.y + r2.get_actual_height()) - std::max(r1.y, r2.y));
+        return (long long)x_overlap * y_overlap;
+    };
+
+    // 3. UPDATED CHECKER: Returns true if overlap is within allowed limit
+    auto is_valid_relaxed = [&](const RectanglePlacement& r, int box_id,
+                                const std::vector<RectanglePlacement>& sol, int skip_idx) -> bool {
+        long long current_overlap = 0;
+
         for (int i = 0; i < (int)sol.size(); i++) {
             if (i == skip_idx) continue;
             if (sol[i].box_id != box_id) continue;
 
-            const auto& other = sol[i];
-            if (!(r.x >= other.x + other.get_actual_width() ||
-                  r.x + r.get_actual_width() <= other.x ||
-                  r.y >= other.y + other.get_actual_height() ||
-                  r.y + r.get_actual_height() <= other.y)) {
-                return true;
-            }
+            // Check if they intersect
+            current_overlap += calculate_intersection(r, sol[i]);
+
+            // Optimization: Fail early if we exceed the limit
+            if (current_overlap > allowed_overlap_area) return false;
         }
-        return false;
+        return true;
     };
 
-    for (size_t i = 0; i < box_utilizations.size() && nbs.size() < MAX_NEIGHBORS; i++) {
-        int sparse_box_id = box_utilizations[i].first;
-        double sparse_util = box_utilizations[i].second;
+    // --- Generation Loops ---
 
-        if (sparse_util > 0.7) break;
+    // LOOP 1: Move from sparse to target
+    for (size_t i = 0; i < box_utilizations.size() && nbs.size() < MAX_NEIGHBORS; i++) {
+        // ... (existing selection logic) ...
+        int sparse_box_id = box_utilizations[i].first;
+        if (box_utilizations[i].second > 0.7) break;
 
         auto sparse_it = box_data.find(sparse_box_id);
         if (sparse_it == box_data.end()) continue;
-        const auto& sparse_data = sparse_it->second;
-
-        auto indices = sparse_data.rect_indices;
+        auto indices = sparse_it->second.rect_indices;
         std::shuffle(indices.begin(), indices.end(), gen);
 
         int max_rects_to_move = std::min(5, (int)indices.size());
@@ -108,16 +122,13 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
 
             for (size_t j = box_utilizations.size() - 1; j > i && nbs.size() < MAX_NEIGHBORS; j--) {
                 int target_box_id = box_utilizations[j].first;
+                // ... (existing target checks) ...
                 if (target_box_id == sparse_box_id) continue;
-
                 auto target_it = box_data.find(target_box_id);
                 if (target_it == box_data.end()) continue;
-                const auto& target_data = target_it->second;
 
-                long long target_area = target_data.total_area;
-                long long box_capacity = (long long)L * L;
-
-                if (target_area + rect_area > box_capacity * 0.85) continue;
+                // Allow slightly more aggressive filling if T is high
+                if (target_it->second.total_area + rect_area > (long long)L * L * 0.95) continue;
 
                 for (int attempt = 0; attempt < 15 && nbs.size() < MAX_NEIGHBORS; attempt++) {
                     for (int rot = 0; rot < 2; rot++) {
@@ -138,7 +149,8 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
                         auto nb = solution;
                         nb[idx] = moved;
 
-                        if (!collides_in_box(moved, target_box_id, nb, idx)) {
+                        // USE THE NEW RELAXED CHECK
+                        if (is_valid_relaxed(moved, target_box_id, nb, idx)) {
                             add_neighbor(nb);
                             break;
                         }
@@ -148,12 +160,12 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
         }
     }
 
+    // LOOP 2: Shuffle within box
     for (const auto& [box_id, data] : box_data) {
         if (nbs.size() >= MAX_NEIGHBORS) break;
-
+        // ... (existing logic) ...
         auto indices = data.rect_indices;
         std::shuffle(indices.begin(), indices.end(), gen);
-
         int max_shuffle = std::min(6, (int)indices.size());
 
         for (int i = 0; i < max_shuffle && nbs.size() < MAX_NEIGHBORS; i++) {
@@ -171,7 +183,7 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
                 for (int rot = 0; rot < 2; rot++) {
                     RectanglePlacement moved = rect;
                     if (rot == 1) moved.rotated = !moved.rotated;
-
+                    // ... (existing random pos logic) ...
                     int rot_max_x = L - moved.get_actual_width();
                     int rot_max_y = L - moved.get_actual_height();
                     if (rot_max_x < 0 || rot_max_y < 0) continue;
@@ -185,7 +197,8 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
                     auto nb = solution;
                     nb[idx] = moved;
 
-                    if (!collides_in_box(moved, box_id, nb, idx)) {
+                    // USE THE NEW RELAXED CHECK
+                    if (is_valid_relaxed(moved, box_id, nb, idx)) {
                         add_neighbor(nb);
                         break;
                     }
