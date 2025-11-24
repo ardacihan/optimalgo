@@ -1,9 +1,8 @@
-#ifndef GEOMATRYBASEDNEIGHBORHOODSOLVER_H
-#define GEOMATRYBASEDNEIGHBORHOODSOLVER_H
+#ifndef GEOMETRYBASEDNEIGHBORHOODSOLVER_H
+#define GEOMETRYBASEDNEIGHBORHOODSOLVER_H
 
 #include "../problem/RectangleFittingProblem.h"
 #include <vector>
-
 #include "Solver.h"
 
 class GeometryBasedNeighborhoodSolver : public Solver {
@@ -12,4 +11,4 @@ protected:
         RectangleFittingProblem &problem) override;
 };
 
-#endif //  GEOMATRYBASEDNEIGHBORHOODSOLVER_H
+#endif // GEOMETRYBASEDNEIGHBORHOODSOLVER_H

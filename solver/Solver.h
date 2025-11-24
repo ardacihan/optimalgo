@@ -51,12 +51,13 @@ public:
                 return solution;
             }
 
+            // Use temperature if available (for relaxed solver)
             int current_obj = problem.objective(solution);
             std::vector<RectanglePlacement> best_neighbor = solution;
             int best_obj = current_obj;
 
             for (auto &n : neighbors) {
-                int obj = problem.objective(n);
+                int obj = problem.objective(n);  // Regular solvers use default objective
                 if (obj > best_obj) {
                     best_obj = obj;
                     best_neighbor = n;
@@ -72,6 +73,8 @@ public:
                 return solution;
             }
         }
+
+
         // B. Subproblem is too large: Divide-and-Conquer
         else {
             // --- Divide ---
@@ -107,7 +110,7 @@ public:
     }
 
     // Single step optimization (for iterative/GUI use)
-    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem) {
+    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {
         std::vector<RectanglePlacement> solution = problem.get_current_solution();
 
         auto neighbors = construct_neighbors(problem);
@@ -116,21 +119,33 @@ public:
             return solution;
         }
 
-        int current_obj = problem.objective(solution);
+        // Use temperature-dependent objective for relaxed solver, default for others
+        int current_obj = (T < 1000) ? problem.objective(solution, T) : problem.objective(solution);
         std::vector<RectanglePlacement> best_neighbor = solution;
         int best_obj = current_obj;
 
         for (auto &n : neighbors) {
-            int obj = problem.objective(n);
+            int obj = (T < 1000) ? problem.objective(n, T) : problem.objective(n);
             if (obj > best_obj) {
                 best_obj = obj;
                 best_neighbor = n;
             }
         }
 
+        if (best_obj > current_obj) {
+            std::cout << "Accepted improving move: " << current_obj << " -> " << best_obj;
+            if (T < 1000) std::cout << " (T=" << T << ")";
+            std::cout << std::endl;
+        } else {
+            std::cout << "No improving move found";
+            if (T < 1000) std::cout << " (T=" << T << ")";
+            std::cout << std::endl;
+        }
+
         problem.set_current_solution(best_neighbor);
         return best_neighbor;
     }
+
 
 protected:
     // Pure virtual - each solver implements its own neighborhood structure

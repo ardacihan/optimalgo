@@ -4,9 +4,18 @@
 #include <map>
 #include <iostream>
 #include <climits>
+#include <cmath>
+
+// Original objective function (maintains backward compatibility)
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution) {
+    // Call the new temperature-dependent version with T=1000 (no overlap penalty)
+    return objective(current_solution, 1000);
+}
+
+// New temperature-dependent objective function
+int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
     const int BIG = 10000;
-    const int PENALTY = 500;
+    const int PENALTY = 5000;
     const int TOUCH_BONUS = 500;
     const int SPARSE_BOX_PENALTY = 50;
     const int FRAGMENTATION_PENALTY = 50;
@@ -16,12 +25,39 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     for (auto& r : current_solution) boxes.insert(r.box_id);
     int num_boxes = boxes.size();
 
-    long long overlap = 0, touch_bonus = 0;
+    long long overlap_penalty = 0;
+    long long touch_bonus = 0;
+
+    // Calculate overlap penalty based on temperature
     for (size_t i = 0; i < current_solution.size(); ++i) {
         for (size_t j = i + 1; j < current_solution.size(); ++j) {
             if (current_solution[i].box_id != current_solution[j].box_id) continue;
-            overlap += current_solution[i].getOverlapArea(current_solution[j]);
-            if (edges_touching(current_solution[i], current_solution[j])) touch_bonus++;
+
+            // Calculate overlap area
+            const auto& r1 = current_solution[i];
+            const auto& r2 = current_solution[j];
+            int overlap_x1 = std::max(r1.x, r2.x);
+            int overlap_y1 = std::max(r1.y, r2.y);
+            int overlap_x2 = std::min(r1.x + r1.get_actual_width(), r2.x + r2.get_actual_width());
+            int overlap_y2 = std::min(r1.y + r1.get_actual_height(), r2.y + r2.get_actual_height());
+
+            if (overlap_x1 < overlap_x2 && overlap_y1 < overlap_y2) {
+                int overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1);
+                int area1 = r1.get_actual_width() * r1.get_actual_height();
+                int area2 = r2.get_actual_width() * r2.get_actual_height();
+                double max_rect_area = std::max(area1, area2);
+
+                // Calculate overlap ratio as specified in assignment
+                double overlap_ratio = (double)overlap_area / max_rect_area;
+
+                // Temperature-dependent penalty: at T=1000: penalty=0, at T=0: full penalty
+                double temperature_factor = 1.0 - (T / 1000.0);
+                double penalty_weight = overlap_ratio * temperature_factor * temperature_factor;
+
+                overlap_penalty += (long long)(penalty_weight * PENALTY * 100);
+            }
+
+            if (edges_touching(r1, r2)) touch_bonus++;
         }
     }
 
@@ -69,7 +105,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     }
 
     long long score = -(long long)num_boxes * BIG;
-    score -= overlap * PENALTY;
+    score -= overlap_penalty;  // Now temperature-dependent
     score -= unused / 100;
     score += touch_bonus * TOUCH_BONUS;
     score -= sparse_penalty;
@@ -78,9 +114,20 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     // Reward higher coverage in every box exponentially
     score += (long long)utilization_reward;
 
+    // Debug output for temperature changes
+    if (T < 1000 && T > 0) {
+        std::cout << "T=" << T << " | Overlap penalty: " << overlap_penalty
+                  << " | Boxes: " << num_boxes << " | Score: " << score << std::endl;
+    }
+
     if (score > INT_MAX) return INT_MAX;
     if (score < INT_MIN) return INT_MIN;
     return (int)score;
+}
+
+int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement> &current_solution) {
+    // For backward compatibility, call the original objective
+    return objective(current_solution);
 }
 
 bool RectangleFittingProblem::check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const {

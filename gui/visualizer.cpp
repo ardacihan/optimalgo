@@ -5,6 +5,8 @@
 #include <sstream>
 #include <iomanip>
 #include "imgui_internal.h"
+#include "../solver/RelaxedGeometryBasedNeighborhoodSolver.h"
+
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
     : box_length(15), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
@@ -143,6 +145,9 @@ void RectangleVisualizer::generateInstance() {
 
 void RectangleVisualizer::generateRandomProblem() {
     generateInstance();
+    // Reset relaxed solver temperature when generating new problem
+    reset_relaxed_temperature();
+    std::cout << "Generated new problem and reset temperature to 1000" << std::endl;
 }
 
 void RectangleVisualizer::runSolver() {
@@ -168,14 +173,29 @@ void RectangleVisualizer::runSolver() {
             // Geometry Based
             if (!geometry_solver) {
                 geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+                std::cout << "Initialized Geometry Based Solver" << std::endl;
             }
             result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
-        } else {
+        } else if (gui_config.neighborhood_strategy == 1){
             // Permutation Based
             if (!permutation_solver) {
                 permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+                std::cout << "Initialized Permutation Based Solver" << std::endl;
             }
             result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+        } else {
+            // Relaxed Geometry Based
+            if (!relaxed_geometry_solver) {
+                relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
+                std::cout << "Initialized Relaxed Geometry Based Solver" << std::endl;
+            }
+            // For full solve, use decreasing temperature starting from current temperature
+            int start_temp = 1000; // Start from maximum temperature for full solve
+            std::cout << "Starting full solve with temperature: " << start_temp << std::endl;
+
+            // We need to modify the solver to handle temperature internally for full solves
+            // For now, just use the solver with default temperature handling
+            result = relaxed_geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
         }
 
         // Thread-safe update of results
@@ -190,23 +210,55 @@ void RectangleVisualizer::runSolver() {
 }
 
 void RectangleVisualizer::solveNextStep() {
+    static int current_temperature = 1000;
+
     if (gui_config.neighborhood_strategy == 0) {
-        // Geometry Based
+        // Geometry Based - use default objective (T=1000)
         if (!geometry_solver) {
             geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
         }
-        auto result = geometry_solver->solve_one_step(problem);
+        auto result = geometry_solver->solve_one_step(problem); // Uses default objective
         current_placements = result;
         problem.set_current_solution(result);
-    } else {
-        // Permutation Based
+    } else if (gui_config.neighborhood_strategy == 1){
+        // Permutation Based - use default objective (T=1000)
         if (!permutation_solver) {
             permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
         }
-        auto result = permutation_solver->solve_one_step(problem);
+        auto result = permutation_solver->solve_one_step(problem); // Uses default objective
         current_placements = result;
         problem.set_current_solution(result);
+    } else {
+        // Relaxed Geometry Based - use decreasing temperature
+        if (!relaxed_geometry_solver) {
+            relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
+            std::cout << "Initialized Relaxed Geometry Based Solver" << std::endl;
+        }
+        auto result = relaxed_geometry_solver->solve_one_step(problem, current_temperature);
+        current_placements = result;
+        problem.set_current_solution(result);
+
+        // Decrease temperature for next step
+        if (current_temperature > 0) {
+            current_temperature = std::max(0, current_temperature - 100);
+            std::cout << "Temperature decreased to: " << current_temperature << std::endl;
+        }
     }
+
+    // Check current solution for overlaps
+    int overlap_count = 0;
+    for (size_t i = 0; i < current_placements.size(); i++) {
+        for (size_t j = i + 1; j < current_placements.size(); j++) {
+            if (current_placements[i].box_id != current_placements[j].box_id) continue;
+            if (!(current_placements[i].x >= current_placements[j].x + current_placements[j].get_actual_width() ||
+                  current_placements[i].x + current_placements[i].get_actual_width() <= current_placements[j].x ||
+                  current_placements[i].y >= current_placements[j].y + current_placements[j].get_actual_height() ||
+                  current_placements[i].y + current_placements[i].get_actual_height() <= current_placements[j].y)) {
+                overlap_count++;
+            }
+        }
+    }
+    std::cout << "Current solution has " << overlap_count << " overlaps" << std::endl;
 }
 
 void RectangleVisualizer::revertToOriginal() {
@@ -214,7 +266,9 @@ void RectangleVisualizer::revertToOriginal() {
         current_placements = original_placements;
         problem = RectangleFittingProblem(gui_config.box_size, original_placements);
         setPlacements(original_placements);
-        //std::cout << "Reverted to original problem state" << std::endl;
+        // Reset temperature when reverting to original
+        reset_relaxed_temperature();
+        std::cout << "Reverted to original problem state and reset temperature" << std::endl;
     }
 }
 
@@ -353,8 +407,18 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
     ImGui::Text("Solver Strategy:");
 
-    const char* strategies[] = { "Geometry Based", "Permutation Based" };
+    const char* strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
     ImGui::Combo("Neighborhood Strategy", &gui_config.neighborhood_strategy, strategies, IM_ARRAYSIZE(strategies));
+
+    // Show current temperature for relaxed solver
+    if (gui_config.neighborhood_strategy == 2) {
+        static int current_temp_display = 1000;
+        ImGui::Text("Current Temperature: %d/1000", current_temp_display);
+        if (ImGui::Button("Reset Temperature")) {
+            reset_relaxed_temperature();
+            current_temp_display = 1000;
+        }
+    }
 
     //ImGui::Separator(); TODO maybe add later after calibrating
     //ImGui::Text("Solver Parameters:");

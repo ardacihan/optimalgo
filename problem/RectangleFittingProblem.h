@@ -25,6 +25,9 @@ public:
 
     int objective(const std::vector<RectanglePlacement>& current_solution) override;
 
+    // New overloaded objective function with temperature parameter
+    int objective(const std::vector<RectanglePlacement>& current_solution, int T);
+
     int objective2(const std::vector<RectanglePlacement> &current_solution);
 
     bool solution_legal(const std::vector<RectanglePlacement>& current_solution) const override;

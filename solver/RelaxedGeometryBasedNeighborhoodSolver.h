@@ -1,18 +1,28 @@
-//
-// Created by arda on 13.11.25.
-//
+#ifndef RELAXED_GEOMETRY_BASED_NEIGHBORHOOD_SOLVER_H
+#define RELAXED_GEOMETRY_BASED_NEIGHBORHOOD_SOLVER_H
 
-#ifndef OPTIMALGO_RELAXEDGEOMETRYBASEDNEIGHBORHOODSOLVER_H
-#define OPTIMALGO_RELAXEDGEOMETRYBASEDNEIGHBORHOODSOLVER_H
-
-#include "../problem/RectangleFittingProblem.h"
+#include "GeometryBasedNeighborhoodSolver.h"
 #include <vector>
 
-#include "Solver.h"
+class RelaxedGeometryBasedNeighborhoodSolver : public GeometryBasedNeighborhoodSolver {
+public:
+    std::vector<std::vector<RectanglePlacement>> construct_neighbors(
+        RectangleFittingProblem &problem) override;
 
-class RelaxedGeometryBasedNeighborhoodSolver : public Solver {
-protected:
-    std::vector<std::vector<RectanglePlacement>> construct_neighbors(RectangleFittingProblem &problem);
+
+private:
+    std::vector<std::vector<RectanglePlacement>> construct_overlapping_neighbors(
+        RectangleFittingProblem &problem, int T);
+
+    // Temperature-based parameter calculations
+    double calculate_max_overlap_ratio(int T);
+    int calculate_max_overlap_area(int T, int L);
+    int calculate_overlap_offset(int T, int rect_size);
+    int calculate_perturbation_range(int T);
+
 };
 
-#endif //OPTIMALGO_RELAXEDGEOMETRYBASEDNEIGHBORHOODSOLVER_H
+void reset_relaxed_temperature();
+
+
+#endif // RELAXED_GEOMETRY_BASED_NEIGHBORHOOD_SOLVER_H

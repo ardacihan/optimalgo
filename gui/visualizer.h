@@ -16,6 +16,7 @@
 #include "../problem/RectangleFittingProblem.h"
 #include "../solver/GeometryBasedNeighborhoodSolver.h"
 #include "../solver/RuleBasedNeighborhoodSolver.h"
+#include "../solver/RelaxedGeometryBasedNeighborhoodSolver.h"
 
 struct GUIConfig {
     int rect_count = 1000;
@@ -31,7 +32,7 @@ struct GUIConfig {
     int max_rectangle_in_subproblem = 100;
 
     // Strategy selection
-    int neighborhood_strategy = 0; // 0 = Geometry Based, 1 = Permutation Based
+    int neighborhood_strategy = 2; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based
 };
 
 class RectangleVisualizer {
@@ -49,6 +50,7 @@ private:
     RectangleFittingProblem problem;
     std::unique_ptr<GeometryBasedNeighborhoodSolver> geometry_solver;
     std::unique_ptr<RuleBasedNeighborhoodSolver> permutation_solver;
+    std::unique_ptr<RelaxedGeometryBasedNeighborhoodSolver> relaxed_geometry_solver;
 
     // Threading support for solver
     std::thread solver_thread;

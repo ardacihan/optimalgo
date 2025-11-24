@@ -46,6 +46,8 @@ add_executable(optimalgo
         gui/visualizer.cpp
         gui/main_vis.cpp
         solver/RelaxedGeometryBasedNeighborhoodSolver.cpp
+        problem/BoxOccupancyUtil.cpp
+        problem/BoxOccupancyUtil.h
 )
 
 target_include_directories(optimalgo PUBLIC
