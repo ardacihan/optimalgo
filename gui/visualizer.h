@@ -11,11 +11,11 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "RectanglePlacement.h"
+#include "../problem/RectanglePlacement.h"
 #include "InstanceGenerator.h"
-#include "RectangleFittingProblem.h"
-#include "GeometryBasedNeighborhoodSolver.h"
-#include "RuleBasedNeighborhoodSolver.h"
+#include "../problem/RectangleFittingProblem.h"
+#include "../solver/GeometryBasedNeighborhoodSolver.h"
+#include "../solver/RuleBasedNeighborhoodSolver.h"
 
 struct GUIConfig {
     int rect_count = 1000;

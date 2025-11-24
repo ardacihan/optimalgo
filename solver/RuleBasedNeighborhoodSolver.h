@@ -1,7 +1,7 @@
 #ifndef RULEBASEDNEIGHBORHOODSOLVER_H
 #define RULEBASEDNEIGHBORHOODSOLVER_H
 
-#include "RectangleFittingProblem.h"
+#include "../problem/RectangleFittingProblem.h"
 #include <vector>
 #include "Solver.h"
 

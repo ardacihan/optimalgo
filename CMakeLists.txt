@@ -37,14 +37,15 @@ target_link_libraries(imgui PUBLIC ${glfw_LIBRARIES} OpenGL::GL)
 
 # Your executable
 add_executable(optimalgo
-        RectanglePlacement.cpp
-        InstanceGenerator.cpp
-        OptimizationProblem.cpp
-        RectangleFittingProblem.cpp
-        GeometryBasedNeighborhoodSolver.cpp
-        RuleBasedNeighborhoodSolver.cpp
-        visualizer.cpp
-        main_vis.cpp
+        problem/RectanglePlacement.cpp
+        gui/InstanceGenerator.cpp
+        problem/OptimizationProblem.cpp
+        problem/RectangleFittingProblem.cpp
+        solver/GeometryBasedNeighborhoodSolver.cpp
+        solver/RuleBasedNeighborhoodSolver.cpp
+        gui/visualizer.cpp
+        gui/main_vis.cpp
+        solver/RelaxedGeometryBasedNeighborhoodSolver.cpp
 )
 
 target_include_directories(optimalgo PUBLIC
