@@ -1,11 +1,11 @@
 #ifndef GEOMETRYBASEDNEIGHBORHOODSOLVER_H
 #define GEOMETRYBASEDNEIGHBORHOODSOLVER_H
 
-#include "../problem/RectangleFittingProblem.h"
+#include "../../problem/RectangleFittingProblem.h"
 #include <vector>
-#include "Solver.h"
+#include "LocalSearchSolver.h"
 
-class GeometryBasedNeighborhoodSolver : public Solver {
+class GeometryBasedNeighborhoodSolver : public LocalSearchSolver {
 protected:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem) override;

@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iomanip>
 #include "imgui_internal.h"
-#include "../solver/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
 
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)

@@ -37,7 +37,7 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
     // As T decreases, allowed_overlap approaches 0 (Hard constraints)
     long long allowed_overlap_area = calculate_max_overlap_area(T, L);
 
-    int MAX_NEIGHBORS = 200;
+    int MAX_NEIGHBORS = 100;
     nbs.reserve(MAX_NEIGHBORS);
 
     std::random_device rd;

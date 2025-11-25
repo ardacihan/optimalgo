@@ -10,12 +10,11 @@
 #include <unordered_set>
 #include <algorithm>
 #include <iostream>
-#include <limits>
 #include <cmath>
 
-class Solver {
+class LocalSearchSolver {
 public:
-    virtual ~Solver() = default;
+    virtual ~LocalSearchSolver() = default;
 
     std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem,
                                           int num_reruns,
@@ -150,7 +149,6 @@ private:
         return {left, right};
     }
 
-    // --- Phase 2 Helpers (CORRECTED) ---
 
     std::vector<RectanglePlacement> filter_and_rerun(const std::vector<RectanglePlacement>& full_solution,
                                                      int L,
