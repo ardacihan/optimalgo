@@ -382,7 +382,7 @@ void RectangleVisualizer::render() {
         const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
         ImGui::Combo("Local Search Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
     } else {
-        const char* greedy_strategies[] = { "Biggest First", "Best First" };
+        const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
         ImGui::Combo("Greedy Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));
     }
 
