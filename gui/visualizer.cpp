@@ -360,7 +360,7 @@ void RectangleVisualizer::render() {
     ImGui::SliderInt("Max Width",&gui_config.max_width,std::min(gui_config.min_width+4,box_length),box_length);
     ImGui::SliderInt("Min Height",&gui_config.min_height,3,box_length);
     ImGui::SliderInt("Max Height",&gui_config.max_height,std::min(gui_config.min_height+4,box_length),box_length);
-
+    if (ImGui::Button("Generate new problem")) generateRandomProblem();
     ImGui::Separator();
     ImGui::Text("Box Viewing:");
     ImGui::Checkbox("View All Boxes",&gui_config.view_all_boxes);
