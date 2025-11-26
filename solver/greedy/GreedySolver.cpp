@@ -86,3 +86,19 @@ RectanglePlacement MaximizeContactSelectionStrategy::select_rectangle(RectangleF
 
     return *best_fit;
 }
+
+
+void RightTopPlacementStrategy::place_rectangle(RectangleFittingProblem &problem, RectanglePlacement &rectangle) {
+    rectangle.x = 0;
+    rectangle.y = 0;
+    rectangle.box_id = 0;
+}
+
+std::vector<RectanglePlacement> GreedySolver::solve(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem) {
+    auto solution = problem.get_current_solution();
+    return solution;
+}
+
+std::vector<RectanglePlacement> GreedySolver::solve_with_reruns(RectangleFittingProblem &problem, int num_reruns, int max_rectangle_in_subproblem) {
+    return solve(problem, num_reruns, max_rectangle_in_subproblem);
+}

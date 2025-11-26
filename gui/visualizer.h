@@ -18,6 +18,7 @@
 #include "../solver/local_search/GeometryBasedNeighborhoodSolver.h"
 #include "../solver/local_search/RuleBasedNeighborhoodSolver.h"
 #include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "../solver/greedy/GreedySolver.h"
 
 struct GUIConfig {
     int rect_count = 1000;
@@ -32,8 +33,14 @@ struct GUIConfig {
     int num_reruns = 100;
     int max_rectangle_in_subproblem = 100;
 
-    // Strategy selection
-    int neighborhood_strategy = 2; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based
+    // Solver type selection
+    int solver_type = 0; // 0 = Local Search, 1 = Greedy
+
+    // Local search strategy selection
+    int local_search_strategy = 2; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based
+
+    // Greedy strategy selection
+    int greedy_strategy = 0; // 0 = Biggest First, 1 = Best First
 };
 
 class RectangleVisualizer {
@@ -52,6 +59,7 @@ private:
     std::unique_ptr<GeometryBasedNeighborhoodSolver> geometry_solver;
     std::unique_ptr<RuleBasedNeighborhoodSolver> permutation_solver;
     std::unique_ptr<RelaxedGeometryBasedNeighborhoodSolver> relaxed_geometry_solver;
+    std::unique_ptr<GreedySolver> greedy_solver;
 
     // Threading support for solver
     std::thread solver_thread;
@@ -64,6 +72,7 @@ private:
     void updateScaleAndOffset();
     void updateMaxSizeLimits();
     void saveOriginalState();
+    void reset_relaxed_temperature();
 
 public:
     RectangleVisualizer(int width, int height);

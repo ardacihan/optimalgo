@@ -51,7 +51,6 @@ add_executable(optimalgo
         problem/BoxOccupancyUtil.cpp
         problem/BoxOccupancyUtil.h
         solver/greedy/GreedySolver.cpp
-        solver/greedy/GreedySolver.h
 )
 
 target_include_directories(optimalgo PUBLIC
