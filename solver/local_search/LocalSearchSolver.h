@@ -32,113 +32,77 @@ public:
 
         return working.get_current_solution();
     }
-
-
-std::vector<RectanglePlacement>
-solve_with_reruns(RectangleFittingProblem &problem,
-                  int num_reruns,
-                  int max_rectangle_in_subproblem) override
-{
-    std::vector<RectanglePlacement> current_solution = problem.get_current_solution();
-    int L = problem.get_box_length();
-    if (current_solution.empty()) return current_solution;
-
-    // -----------------------------
-    // 1. BOX UTILIZATION
-    // -----------------------------
-    std::unordered_map<int, double> box_areas;
-    std::unordered_map<int, int> box_counts;
-
-    for (const auto& r : current_solution) {
-        box_areas[r.box_id] += (double)(r.width * r.height);
-        box_counts[r.box_id]++;
+    void reset_move_ids(std::vector<RectanglePlacement>& sol) {
+        for (auto& r : sol)
+            r.move_id = -1;
     }
 
-    double box_capacity = (double)L * L;
 
-    // -----------------------------
-    // 2. LOCK BOXES ≥ 80% UTIL
-    //    BUT FORCE AT LEAST 2 ACTIVE BOXES
-    // -----------------------------
-    struct BoxInfo { int id; double util; };
-    std::vector<BoxInfo> boxes;
 
-    for (const auto& [bid, area] : box_areas)
-        boxes.push_back({ bid, area / box_capacity });
+    std::vector<RectanglePlacement>
+    solve_with_reruns(RectangleFittingProblem &problem,
+                      int num_reruns,
+                      int max_rectangle_in_subproblem) override
+    {
+        std::vector<RectanglePlacement> current_solution = problem.get_current_solution();
+        int L = problem.get_box_length();
+        if (current_solution.empty()) return current_solution;
 
-    std::sort(boxes.begin(), boxes.end(),
-              [](auto& a, auto& b) { return a.util > b.util; });
+        // -----------------------------
+        // 1. COMPUTE BOX UTILIZATION
+        // -----------------------------
+        std::unordered_map<int, double> box_areas;
+        for (const auto& r : current_solution)
+            box_areas[r.box_id] += (double)(r.width * r.height);
 
-    std::unordered_set<int> locked_boxes;
-    std::unordered_set<int> active_boxes;
+        double box_capacity = (double)L * L;
 
-    for (const auto& b : boxes) {
-        if (b.util >= 0.80) locked_boxes.insert(b.id);
-        else active_boxes.insert(b.id);
-    }
+        // -----------------------------
+        // 2. FILTER MOST-OCCUPIED BOXES (>= 80%)
+        // -----------------------------
+        std::vector<RectanglePlacement> locked;
+        std::vector<RectanglePlacement> active;
 
-    // ✅ FORCE AT LEAST 2 ACTIVE BOXES
-    while ((int)active_boxes.size() < 2 && !locked_boxes.empty()) {
-        int revive = *locked_boxes.begin();
-        locked_boxes.erase(revive);
-        active_boxes.insert(revive);
-    }
-
-    std::vector<RectanglePlacement> locked;
-    std::vector<RectanglePlacement> active;
-
-    for (const auto& r : current_solution) {
-        if (locked_boxes.count(r.box_id)) locked.push_back(r);
-        else active.push_back(r);
-    }
-
-    if (active.empty()) return current_solution;
-
-    // -----------------------------
-    // 3. SUBPROBLEM LIMIT BY RECT COUNT
-    // -----------------------------
-    std::vector<RectanglePlacement> optimized_active;
-
-    if ((int)active.size() <= max_rectangle_in_subproblem) {
-        // --- LOCAL SEARCH UNTIL TRUE LOCAL OPTIMUM ---
-        RectangleFittingProblem sub(L, active);
-        double prev_score = -1e18;
-
-        while (true) {
-            auto candidate = apply_local_search(sub, sub.get_current_solution());
-            double score = sub.objective(candidate);
-            if (score <= prev_score) break;
-
-            prev_score = score;
-            sub.set_current_solution(candidate);
+        for (const auto& r : current_solution) {
+            double util = box_areas[r.box_id] / box_capacity;
+            if (util >= 0.80)
+                locked.push_back(r);
+            else
+                active.push_back(r);
         }
 
-        optimized_active = sub.get_current_solution();
-    }
-    else {
-        // ✅ SPLIT BY BOX ID FIRST (STRUCTURAL)
-        std::unordered_map<int, std::vector<RectanglePlacement>> by_box;
-        for (const auto& r : active) by_box[r.box_id].push_back(r);
+        // ✅ Force at least 2 boxes active
+        std::unordered_set<int> active_boxes;
+        for (auto& r : active) active_boxes.insert(r.box_id);
+        for (auto& r : locked) {
+            if (active_boxes.size() >= 2) break;
+            active.push_back(r);
+            active_boxes.insert(r.box_id);
+        }
 
-        if (by_box.size() > 1) {
-            auto it = by_box.begin();
-            std::vector<RectanglePlacement> left = it->second;
-            ++it;
+        if (active.empty()) return current_solution;
 
-            std::vector<RectanglePlacement> right;
-            for (; it != by_box.end(); ++it)
-                right.insert(right.end(), it->second.begin(), it->second.end());
+        // -----------------------------
+        // 3. SUBPROBLEM SOLVE OR SPLIT
+        // -----------------------------
+        std::vector<RectanglePlacement> optimized_active;
 
-            RectangleFittingProblem p1(L, left);
-            RectangleFittingProblem p2(L, right);
+        if ((int)active.size() <= max_rectangle_in_subproblem) {
+            RectangleFittingProblem sub(L, active);
+            double prev_score = -1e18;
 
-            auto solved_left  = solve_with_reruns(p1, num_reruns, max_rectangle_in_subproblem);
-            auto solved_right = solve_with_reruns(p2, num_reruns, max_rectangle_in_subproblem);
+            while (true) {
+                auto candidate = apply_local_search(sub, sub.get_current_solution());
+                double score = sub.objective(candidate);
+                if (score <= prev_score) break;
 
-            optimized_active = safe_merge(solved_left, solved_right);
+                prev_score = score;
+                sub.set_current_solution(candidate);
+            }
+
+            optimized_active = sub.get_current_solution();
         }
         else {
-            // ✅ FALLBACK: PURE RECT SPLIT
             int mid = active.size() / 2;
             std::vector<RectanglePlacement> left(active.begin(), active.begin() + mid);
             std::vector<RectanglePlacement> right(active.begin() + mid, active.end());
@@ -151,13 +115,22 @@ solve_with_reruns(RectangleFittingProblem &problem,
 
             optimized_active = safe_merge(solved_left, solved_right);
         }
-    }
 
-    // -----------------------------
-    // 4. SAFE MERGE
-    // -----------------------------
-    return safe_merge(locked, optimized_active);
-}
+        // -----------------------------
+        // 4. RESET MOVE IDS AFTER RERUN
+        // -----------------------------
+        reset_move_ids(optimized_active);
+
+        // -----------------------------
+        // 5. SAFE MERGE
+        // -----------------------------
+        auto merged = safe_merge(locked, optimized_active);
+
+        // ✅ Also reset locked (critical)
+        reset_move_ids(merged);
+
+        return merged;
+    }
 
     // Helper for GUI stepping
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {

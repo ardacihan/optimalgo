@@ -10,19 +10,19 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 }
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
-    const int BIG = 10000;
-    const int PENALTY = 5000;
-    const int TOUCH_BONUS = 1000;
-    const int SPARSE_BOX_PENALTY = 50;
-    const int FRAGMENTATION_PENALTY = 50;
-    const double UTIL_REWARD_EXP = 10;
+    const int BIG = 1000;
+    const int PENALTY = 500;
+    const int TOUCH_BONUS = 10;
+    const int SPARSE_BOX_PENALTY = 5;
+    const int FRAGMENTATION_PENALTY = 5;
+    const double UTIL_REWARD_EXP = 5;
 
     std::unordered_set<int> boxes;
     for (auto& r : current_solution) boxes.insert(r.box_id);
     int num_boxes = boxes.size();
 
     long long overlap_penalty = 0;
-    long long touch_bonus = 0;
+    long long touch_bonus = 3;
 
     for (size_t i = 0; i < current_solution.size(); ++i) {
         for (size_t j = i + 1; j < current_solution.size(); ++j) {
