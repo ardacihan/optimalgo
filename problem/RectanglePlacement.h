@@ -14,6 +14,7 @@ struct RectanglePlacement {
     int y;
     bool rotated;
     int box_id;
+    int move_id = -1;
 
     RectanglePlacement(int w, int h, int x_pos, int y_pos, bool rot, int box)
         : width(w), height(h), x(x_pos), y(y_pos), rotated(rot), box_id(box) {}
