@@ -48,85 +48,110 @@ public:
         int L = problem.get_box_length();
         if (current_solution.empty()) return current_solution;
 
-        // -----------------------------
-        // 1. COMPUTE BOX UTILIZATION
-        // -----------------------------
-        std::unordered_map<int, double> box_areas;
-        for (const auto& r : current_solution)
-            box_areas[r.box_id] += (double)(r.width * r.height);
+        // 1. Calculate Utilization per Box
+        std::unordered_map<int, double> box_util_map;
+        long long box_capacity = (long long)L * L;
 
-        double box_capacity = (double)L * L;
+        for (const auto& r : current_solution) {
+            box_util_map[r.box_id] += (double)(r.width * r.height);
+        }
 
-        // -----------------------------
-        // 2. FILTER MOST-OCCUPIED BOXES (>= 80%)
-        // -----------------------------
+        // 2. Identify "Locked" boxes (High utilization) vs "Active" boxes
+        // We lower the threshold slightly to ensure we don't lock moderately bad boxes
+        double lock_threshold = 0.92;
         std::vector<RectanglePlacement> locked;
         std::vector<RectanglePlacement> active;
 
         for (const auto& r : current_solution) {
-            double util = box_areas[r.box_id] / box_capacity;
-            if (util >= 0.80)
+            double util = box_util_map[r.box_id] / box_capacity;
+            if (util >= lock_threshold)
                 locked.push_back(r);
             else
                 active.push_back(r);
         }
 
-        // ✅ Force at least 2 boxes active
-        std::unordered_set<int> active_boxes;
-        for (auto& r : active) active_boxes.insert(r.box_id);
-        for (auto& r : locked) {
-            if (active_boxes.size() >= 2) break;
-            active.push_back(r);
-            active_boxes.insert(r.box_id);
+        // Ensure we have enough active rectangles to do meaningful work
+        if (active.size() < std::max(3, (int)(current_solution.size() * 0.10))) {
+             // If everything is locked but we aren't optimal, unlock the worst locked boxes
+             // (Logic simplified: just return if mostly optimal, or unlock everything if stuck)
+             if (active.empty()) return current_solution;
         }
 
-        if (active.empty()) return current_solution;
-
-        // -----------------------------
-        // 3. SUBPROBLEM SOLVE OR SPLIT
-        // -----------------------------
+        // 3. SOLVE or SPLIT
         std::vector<RectanglePlacement> optimized_active;
 
         if ((int)active.size() <= max_rectangle_in_subproblem) {
+            // --- DIRECT OPTIMIZATION ---
             RectangleFittingProblem sub(L, active);
-            double prev_score = -1e18;
 
-            while (true) {
-                auto candidate = apply_local_search(sub, sub.get_current_solution());
-                double score = sub.objective(candidate);
-                if (score <= prev_score) break;
-
-                prev_score = score;
-                sub.set_current_solution(candidate);
+            // Run a few passes of local search
+            // (Assumes apply_local_search runs your neighborhood logic)
+            auto current_sub = sub.get_current_solution();
+            for(int k=0; k<5; k++) {
+                current_sub = apply_local_search(sub, current_sub);
+                sub.set_current_solution(current_sub);
             }
-
             optimized_active = sub.get_current_solution();
         }
         else {
-            int mid = active.size() / 2;
-            std::vector<RectanglePlacement> left(active.begin(), active.begin() + mid);
-            std::vector<RectanglePlacement> right(active.begin() + mid, active.end());
+            // --- SMART SPLITTING (SORTED BY DENSITY) ---
 
-            RectangleFittingProblem p1(L, left);
-            RectangleFittingProblem p2(L, right);
+            // Group active rects by box
+            std::unordered_map<int, std::vector<RectanglePlacement>> rects_by_box;
+            for (const auto& r : active) {
+                rects_by_box[r.box_id].push_back(r);
+            }
 
-            auto solved_left  = solve_with_reruns(p1, num_reruns, max_rectangle_in_subproblem);
-            auto solved_right = solve_with_reruns(p2, num_reruns, max_rectangle_in_subproblem);
+            // Create a list of boxes sorted by utilization (Ascending)
+            // We want the emptiest boxes (15%, 20%) to be at the front
+            std::vector<std::pair<double, int>> sorted_boxes;
+            for (const auto& [bid, _] : rects_by_box) {
+                double u = box_util_map[bid] / box_capacity;
+                sorted_boxes.push_back({u, bid});
+            }
+            std::sort(sorted_boxes.begin(), sorted_boxes.end());
 
-            optimized_active = safe_merge(solved_left, solved_right);
+            // Distribute into groups
+            // Group 1 gets the "trash" (lowest util boxes) so they can be merged.
+            std::vector<RectanglePlacement> group1, group2;
+            int count_g1 = 0;
+            int target = active.size() / 2;
+
+            for (const auto& pair : sorted_boxes) {
+                int bid = pair.second;
+                auto& box_content = rects_by_box[bid];
+
+                if (count_g1 < target) {
+                    group1.insert(group1.end(), box_content.begin(), box_content.end());
+                    count_g1 += box_content.size();
+                } else {
+                    group2.insert(group2.end(), box_content.begin(), box_content.end());
+                }
+            }
+
+            // Fallback for edge cases (e.g. one massive box vs many small ones)
+            if (group1.empty() || group2.empty()) {
+                int mid = active.size() / 2;
+                group1 = std::vector<RectanglePlacement>(active.begin(), active.begin() + mid);
+                group2 = std::vector<RectanglePlacement>(active.begin() + mid, active.end());
+            }
+
+            // Recursive Solve
+            RectangleFittingProblem p1(L, group1);
+            RectangleFittingProblem p2(L, group2);
+
+            auto s1 = solve_with_reruns(p1, std::max(1, num_reruns - 1), max_rectangle_in_subproblem);
+            auto s2 = solve_with_reruns(p2, std::max(1, num_reruns - 1), max_rectangle_in_subproblem);
+
+            // Merge results
+            optimized_active = s1;
+            optimized_active.insert(optimized_active.end(), s2.begin(), s2.end());
         }
 
-        // -----------------------------
-        // 4. RESET MOVE IDS AFTER RERUN
-        // -----------------------------
+        // 4. Final Merge
         reset_move_ids(optimized_active);
-
-        // -----------------------------
-        // 5. SAFE MERGE
-        // -----------------------------
-        auto merged = safe_merge(locked, optimized_active);
-
-        // ✅ Also reset locked (critical)
+        auto merged = locked;
+        merged.insert(merged.end(), optimized_active.begin(), optimized_active.end());
         reset_move_ids(merged);
 
         return merged;

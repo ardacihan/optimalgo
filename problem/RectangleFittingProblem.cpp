@@ -10,102 +10,99 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 }
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
-    const int BIG = 1000;
-    const int PENALTY = 500;
-    const int TOUCH_BONUS = 10;
-    const int SPARSE_BOX_PENALTY = 5;
-    const int FRAGMENTATION_PENALTY = 5;
-    const double UTIL_REWARD_EXP = 5;
+    // PARAMETERS
+    // BIG: The reward for removing a box entirely. Must be the dominant factor.
+    const int BIG = 1000000;
+    const int PENALTY = 5000;
+    const int TOUCH_BONUS = 5;       // Reduced slightly so it doesn't prevent moving
+    const int SPARSE_BOX_PENALTY = 200;
+
+    // CRITICAL CHANGE: Use Square (2.0) instead of 5.0.
+    // This creates a convex curve where 2x 50% boxes are worse than 1x 100% box.
+    const double UTIL_REWARD_EXP = 2.0;
+    const double UTIL_MULTIPLIER = 100000.0;
+
+    if (current_solution.empty()) return 0;
 
     std::unordered_set<int> boxes;
-    for (auto& r : current_solution) boxes.insert(r.box_id);
-    int num_boxes = boxes.size();
+    std::unordered_map<int, long long> box_area_used;
+    std::unordered_map<int, int> box_item_count;
 
+    // 1. Calculate Basics & Overlaps
     long long overlap_penalty = 0;
-    long long touch_bonus = 3;
+    long long touch_bonus = 0;
 
     for (size_t i = 0; i < current_solution.size(); ++i) {
-        for (size_t j = i + 1; j < current_solution.size(); ++j) {
-            if (current_solution[i].box_id != current_solution[j].box_id) continue;
+        const auto& r1 = current_solution[i];
 
-            const auto& r1 = current_solution[i];
+        // Track box stats
+        boxes.insert(r1.box_id);
+        box_area_used[r1.box_id] += (long long)r1.get_actual_width() * r1.get_actual_height();
+        box_item_count[r1.box_id]++;
+
+        for (size_t j = i + 1; j < current_solution.size(); ++j) {
             const auto& r2 = current_solution[j];
+
+            // Only care about interactions in the same box
+            if (r1.box_id != r2.box_id) continue;
+
+            // Overlap Calculation
             int overlap_x1 = std::max(r1.x, r2.x);
             int overlap_y1 = std::max(r1.y, r2.y);
             int overlap_x2 = std::min(r1.x + r1.get_actual_width(), r2.x + r2.get_actual_width());
             int overlap_y2 = std::min(r1.y + r1.get_actual_height(), r2.y + r2.get_actual_height());
 
             if (overlap_x1 < overlap_x2 && overlap_y1 < overlap_y2) {
-                int overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1);
-                int area1 = r1.get_actual_width() * r1.get_actual_height();
-                int area2 = r2.get_actual_width() * r2.get_actual_height();
-                double max_rect_area = std::max(area1, area2);
+                long long overlap_area = (long long)(overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1);
 
-                double overlap_ratio = (double)overlap_area / max_rect_area;
+                // Dynamic penalty based on Temperature (if T is high, penalty is lower to allow traversal)
+                double temp_factor = 1.0;
+                if (T < 1000) temp_factor = 1.0 - (T / 1200.0); // Simple linear decay
 
-                double temperature_factor = 1.0 - (T / 1000.0);
-                double penalty_weight = overlap_ratio * temperature_factor * temperature_factor;
-
-                overlap_penalty += (long long)(penalty_weight * PENALTY * 100);
+                overlap_penalty += (long long)(overlap_area * PENALTY * temp_factor);
             }
 
-            if (edges_touching(r1, r2)) touch_bonus++;
+            // Adjacency Bonus
+            if (edges_touching(r1, r2)) {
+                touch_bonus += TOUCH_BONUS;
+            }
         }
     }
 
-    std::unordered_map<int, long long> cov;
-    std::unordered_map<int, int> rect_count;
-    long long unused = 0;
-
-    for (auto& r : current_solution) {
-        long long area = r.get_actual_width() * r.get_actual_height();
-        cov[r.box_id] += area;
-        rect_count[r.box_id]++;
-    }
-
+    int num_boxes = boxes.size();
+    long long box_capacity = (long long)L * L;
+    double utilization_score = 0.0;
     long long sparse_penalty = 0;
-    double utilization_reward = 0.0;
 
-    for (int b : boxes) {
-        long long box_area = 1LL * L * L;
-        long long used_area = cov[b];
-        double util = (double)used_area / (double)box_area;
-        unused += (box_area - used_area);
+    // 2. Calculate Sum of Squares Score
+    for (int b_id : boxes) {
+        double util = (double)box_area_used[b_id] / (double)box_capacity;
 
-        utilization_reward += std::pow(util, UTIL_REWARD_EXP) * 15000.0;
+        // REWARD: Utilization^2
+        // Example:
+        // Two boxes at 50% = 0.25 + 0.25 = 0.5 score
+        // One box at 100%  = 1.0 score (Better!)
+        utilization_score += std::pow(util, UTIL_REWARD_EXP) * UTIL_MULTIPLIER;
 
-        if (used_area * 100 < box_area * 30) sparse_penalty += SPARSE_BOX_PENALTY;
-        if (rect_count[b] <= 2) sparse_penalty += SPARSE_BOX_PENALTY / 2;
-    }
-
-    long long fragmentation = 0;
-    for (const auto& [box_id, count] : rect_count) {
-        if (count == 0) continue;
-        int min_x = L, max_x = 0, min_y = L, max_y = 0;
-        for (const auto& r : current_solution) {
-            if (r.box_id != box_id) continue;
-            min_x = std::min(min_x, r.x);
-            max_x = std::max(max_x, r.x + r.get_actual_width());
-            min_y = std::min(min_y, r.y);
-            max_y = std::max(max_y, r.y + r.get_actual_height());
+        // Penalty for extremely sparse boxes (e.g. < 10% full) to encourage emptying them
+        if (util < 0.10) {
+            sparse_penalty += SPARSE_BOX_PENALTY;
         }
-        long long bbox_area = (long long)(max_x - min_x) * (max_y - min_y);
-        long long actual_coverage = cov[box_id];
-        if (bbox_area > actual_coverage * 2)
-            fragmentation += (bbox_area - actual_coverage) / 10;
     }
 
+    // 3. Final Assembly
+    // Base score is negative (minimize boxes)
     long long score = -(long long)num_boxes * BIG;
+
+    score += (long long)utilization_score; // Add the convex reward
+    score += touch_bonus;
     score -= overlap_penalty;
-    score -= unused / 100;
-    score += touch_bonus * TOUCH_BONUS;
     score -= sparse_penalty;
-    score -= fragmentation * FRAGMENTATION_PENALTY;
 
-    score += (long long)utilization_reward;
-
+    // Safety clamping
     if (score > INT_MAX) return INT_MAX;
     if (score < INT_MIN) return INT_MIN;
+
     return (int)score;
 }
 
