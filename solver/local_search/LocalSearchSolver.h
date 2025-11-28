@@ -27,6 +27,7 @@ public:
 
         for (int i = 0; i < num_reruns; ++i) {
             auto result = solve_with_reruns(working, num_reruns, max_rectangle_in_subproblem);
+            std::cout << "Run" << i << std::endl;
             working.set_current_solution(result);
         }
 
@@ -70,10 +71,7 @@ public:
                 active.push_back(r);
         }
 
-        // Ensure we have enough active rectangles to do meaningful work
         if (active.size() < std::max(3, (int)(current_solution.size() * 0.10))) {
-             // If everything is locked but we aren't optimal, unlock the worst locked boxes
-             // (Logic simplified: just return if mostly optimal, or unlock everything if stuck)
              if (active.empty()) return current_solution;
         }
 
@@ -81,7 +79,6 @@ public:
         std::vector<RectanglePlacement> optimized_active;
 
         if ((int)active.size() <= max_rectangle_in_subproblem) {
-            // --- DIRECT OPTIMIZATION ---
             RectangleFittingProblem sub(L, active);
 
             // Run a few passes of local search
@@ -94,8 +91,6 @@ public:
             optimized_active = sub.get_current_solution();
         }
         else {
-            // --- SMART SPLITTING (SORTED BY DENSITY) ---
-
             // Group active rects by box
             std::unordered_map<int, std::vector<RectanglePlacement>> rects_by_box;
             for (const auto& r : active) {
@@ -187,29 +182,67 @@ protected:
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem) = 0;
 
-    std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
-                                                       std::vector<RectanglePlacement> initial) {
+std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
+                                                   std::vector<RectanglePlacement> initial,
+                                                   int max_iterations = 100,
+                                                   int max_non_improving = 10) {
+    auto current_solution = initial;
+    int current_obj = problem.objective(current_solution);
+
+    std::vector<RectanglePlacement> best_sol = current_solution;
+    int best_obj = current_obj;
+
+    int non_improving_count = 0;
+
+    for (int iter = 0; iter < max_iterations && non_improving_count < max_non_improving; iter++) {
+        std::cout << "Local Search Iteration " << iter
+                  << ", Current Objective: " << current_obj << std::endl;
+
         auto neighbors = construct_neighbors(problem);
-        if (neighbors.empty()) return initial;
+        if (neighbors.empty()) break;
 
-        int current_obj = problem.objective(initial);
-        std::vector<RectanglePlacement> best_sol = initial;
-        int best_obj = current_obj;
+        bool improved = false;
+        int best_neighbor_obj = current_obj;
+        std::vector<RectanglePlacement> best_neighbor = current_solution;
 
+        // Find best neighbor
         for (auto &n : neighbors) {
             int obj = problem.objective(n);
-            if (obj > best_obj) {
-                best_obj = obj;
-                best_sol = n;
+            if (obj > best_neighbor_obj) {
+                best_neighbor_obj = obj;
+                best_neighbor = n;
+                improved = true;
             }
         }
 
-        if (best_obj > current_obj) {
-            problem.set_current_solution(best_sol);
-            return best_sol;
+        if (improved) {
+            current_solution = best_neighbor;
+            current_obj = best_neighbor_obj;
+
+            if (current_obj > best_obj) {
+                best_sol = current_solution;
+                best_obj = current_obj;
+                non_improving_count = 0; // Reset counter on improvement
+                std::cout << "New best objective: " << best_obj << std::endl;
+            }
+
+            // Update problem state for next neighborhood construction
+            problem.set_current_solution(current_solution);
+        } else {
+            non_improving_count++;
+            std::cout << "No improvement found (" << non_improving_count
+                      << "/" << max_non_improving << ")" << std::endl;
+
+            // Optional: Add diversification here (random restart, perturbation, etc.)
         }
-        return initial;
     }
+
+    std::cout << "Local search finished. Best objective: " << best_obj
+              << " (improvement: " << (best_obj - problem.objective(initial))
+              << ")" << std::endl;
+
+    return best_sol;
+}
 
 
 
