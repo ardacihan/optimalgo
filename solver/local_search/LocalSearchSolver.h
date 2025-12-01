@@ -233,7 +233,7 @@ std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &prob
             std::cout << "No improvement found (" << non_improving_count
                       << "/" << max_non_improving << ")" << std::endl;
 
-            // Optional: Add diversification here (random restart, perturbation, etc.)
+            return best_sol;
         }
     }
 

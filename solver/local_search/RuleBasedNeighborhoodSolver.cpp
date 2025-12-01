@@ -110,8 +110,6 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
     return result;
 }
 
-// ============== Neighborhood Construction ==============
-
 std::vector<std::vector<RectanglePlacement>>
 RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem) {
 
@@ -120,7 +118,7 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 200;
+    const int MAX_NEIGHBORS = 50;
 
     if (n == 0) return neighbors;
 
@@ -133,17 +131,33 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
         rect_indices[i] = i;
     }
 
-    // Swap indices (cheap!) instead of copying rectangles
+    // Swap indices and check for valid placements
     for (int i = 0; i < n && neighbors.size() < MAX_NEIGHBORS; i++) {
         for (int j = i + 1; j < n && neighbors.size() < MAX_NEIGHBORS; j++) {
             std::vector<int> reordered = rect_indices;
             std::swap(reordered[i], reordered[j]);
 
             auto new_solution = apply_greedy_placement_indexed(reordered, rect_dims, L);
-            neighbors.push_back(new_solution);
+
+            // Check if the solution has any overlaps
+            bool has_overlap = false;
+            for (int k = 0; k < n && !has_overlap; k++) {
+                for (int l = k + 1; l < n && !has_overlap; l++) {
+                    if (new_solution[k].box_id == new_solution[l].box_id) {
+                        if (new_solution[k].collides(new_solution[l])) {
+                            has_overlap = true;
+                        }
+                    }
+                }
+            }
+
+            // Only add valid (non-overlapping) solutions
+            if (!has_overlap) {
+                neighbors.push_back(new_solution);
+            }
         }
     }
 
-    std::cout << "Generated " << neighbors.size() << " neighbors" << std::endl;
+    std::cout << "Generated " << neighbors.size() << " valid neighbors" << std::endl;
     return neighbors;
 }
