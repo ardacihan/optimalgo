@@ -13,7 +13,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     // SIMPLIFIED PARAMETERS - Less is more
     const int BOX_PENALTY = 10000;      // Dominant penalty per box
     const int OVERLAP_PENALTY = 50;     // Per unit area
-    const int UTILIZATION_BONUS = 500;  // Reward for high utilization
+    const int UTILIZATION_BONUS = 300;  // Reward for high utilization
 
     if (current_solution.empty()) return 0;
 
@@ -47,7 +47,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
     long long box_capacity = (long long)L * L;
 
     // 2. Calculate utilization bonus (convex reward)
-    double utilization_bonus = 0.0;
+    double utilization_bonus = 1.0;
     for (int box_id : boxes_used) {
         double util = (double)box_area_used[box_id] / box_capacity;
         // Convex reward: util^2 encourages consolidation

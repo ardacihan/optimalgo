@@ -1,13 +1,13 @@
-    #include "GeometryBasedNeighborhoodSolver.h"
-    #include "problem/BoxOccupancyUtil.h"
-    #include <vector>
-    #include <algorithm>
-    #include <iostream>
-    #include <stack>
-    #include <unordered_map>
-    #include <set>
-    #include <memory>
-    #include <cmath>
+#include "GeometryBasedNeighborhoodSolver.h"
+#include "problem/BoxOccupancyUtil.h"
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include <stack>
+#include <unordered_map>
+#include <set>
+#include <memory>
+#include <cmath>
 
 std::vector<std::vector<RectanglePlacement>>
 GeometryBasedNeighborhoodSolver::construct_neighbors(
@@ -19,80 +19,235 @@ GeometryBasedNeighborhoodSolver::construct_neighbors(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 300;
-    const int MAX_PER_RECT = std::max(1, MAX_NEIGHBORS / n);
+    const int MAX_NEIGHBORS = 100;
 
-    // ---- Minimal validity check ----
-    auto is_valid_placement = [&](const RectanglePlacement& r,
-                                  const std::vector<RectanglePlacement>& sol,
-                                  int skip_idx)
-    {
-        if (r.x < 0 || r.y < 0 ||
-            r.x + r.get_actual_width() > L ||
-            r.y + r.get_actual_height() > L)
-            return false;
+    // Precompute occupancy and box usage
+    std::unordered_map<int, std::vector<bool>> occupancy_grids;
+    std::set<int> used_boxes;
 
-        for (int i = 0; i < sol.size(); i++) {
-            if (i == skip_idx) continue;
-            if (sol[i].box_id == r.box_id && r.collides(sol[i]))
-                return false;
+    // Track box utilization (how many rectangles in each box)
+    std::unordered_map<int, int> box_usage;
+    int total_used_boxes = 0;
+
+    for (const auto& rect : solution) {
+        used_boxes.insert(rect.box_id);
+        box_usage[rect.box_id]++;
+    }
+    total_used_boxes = used_boxes.size();
+
+    // Compute occupancy grids
+    auto compute_occupancy_grid = [&](int box_id) {
+        std::vector<bool> grid(L * L, false);
+        for (const auto& rect : solution) {
+            if (rect.box_id == box_id) {
+                int w = rect.get_actual_width();
+                int h = rect.get_actual_height();
+                for (int x = rect.x; x < rect.x + w; x++) {
+                    for (int y = rect.y; y < rect.y + h; y++) {
+                        if (x < L && y < L) {
+                            grid[y * L + x] = true;
+                        }
+                    }
+                }
+            }
         }
-        return true;
+        return grid;
     };
 
-    // ---- Pure geometry-based neighborhood (capped + fair + traced) ----
-    for (int i = 0; i < n && nbs.size() < MAX_NEIGHBORS; i++) {
-        const auto& moving = solution[i];
+    for (int box_id : used_boxes) {
+        occupancy_grids[box_id] = compute_occupancy_grid(box_id);
+    }
 
-        int old_box = moving.box_id;
-        int old_x   = moving.x;
-        int old_y   = moving.y;
+    // STRATEGY 2: Find empty spaces in existing boxes and move rectangles there
+    std::cout << "Generating empty space utilization moves...\n";
+    for (int target_box : used_boxes) {
+        if (nbs.size() >= MAX_NEIGHBORS) break;
 
-        int per_rect_count = 0;
+        auto grid = occupancy_grids[target_box];
 
-        for (int j = 0; j < n && nbs.size() < MAX_NEIGHBORS; j++) {
-            if (i == j) continue;
+        // Scan for empty spaces
+        for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
+            for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
+                if (!grid[y * L + x]) {
+                    // Found empty cell, try to place rectangles here
+                    for (int i = 0; i < n && nbs.size() < MAX_NEIGHBORS; i++) {
+                        if (solution[i].box_id == target_box) continue;
 
-            const auto& anchor = solution[j];
+                        const auto& rect = solution[i];
+                        for (int rot = 0; rot < 2; rot++) {
+                            if (rot == 1 && rect.width == rect.height) continue;
 
-            for (int rot = 0; rot < 2 && nbs.size() < MAX_NEIGHBORS; rot++) {
-                if (rot == 1 && moving.width == moving.height) continue;
+                            int w = (rot == 0) ? rect.width : rect.height;
+                            int h = (rot == 0) ? rect.height : rect.width;
 
-                int w = (rot == 0) ? moving.width  : moving.height;
-                int h = (rot == 0) ? moving.height : moving.width;
+                            // Check if this empty spot can accommodate the rectangle
+                            bool can_place = true;
+                            for (int dx = 0; dx < w && can_place; dx++) {
+                                for (int dy = 0; dy < h && can_place; dy++) {
+                                    int nx = x + dx;
+                                    int ny = y + dy;
+                                    if (nx >= L || ny >= L || grid[ny * L + nx]) {
+                                        can_place = false;
+                                    }
+                                }
+                            }
 
-                std::vector<std::pair<int,int>> positions = {
-                    { anchor.x - w, anchor.y },                                   // left
-                    { anchor.x + anchor.get_actual_width(), anchor.y },          // right
-                    { anchor.x, anchor.y - h },                                   // bottom
-                    { anchor.x, anchor.y + anchor.get_actual_height() }           // top
-                };
-
-                for (auto& p : positions) {
-                    if (nbs.size() >= MAX_NEIGHBORS) break;
-                    if (per_rect_count >= MAX_PER_RECT) break;
-
-                    auto neighbor = solution;
-                    neighbor[i].box_id  = anchor.box_id;
-                    neighbor[i].x       = p.first;
-                    neighbor[i].y       = p.second;
-                    neighbor[i].rotated = (rot == 1);
-
-                    if (is_valid_placement(neighbor[i], neighbor, i)) {
-
-                        nbs.push_back(neighbor);
-                        per_rect_count++;
+                            if (can_place) {
+                                auto neighbor = solution;
+                                neighbor[i].box_id = target_box;
+                                neighbor[i].x = x;
+                                neighbor[i].y = y;
+                                neighbor[i].rotated = (rot == 1);
+                                nbs.push_back(neighbor);
+                                break;
+                            }
+                        }
                     }
+                    break;
                 }
             }
         }
     }
 
-    std::cout << "GeometryBased (MINIMAL + CAPPED + FAIR): Generated "
-              << nbs.size() << " neighbors\n";
+    // STRATEGY 3: Try to consolidate - move rectangles from sparsely used boxes to densely used ones
+    std::cout << "Generating consolidation moves...\n";
+
+    // Find the most utilized box (most rectangles)
+    int max_usage = 0;
+    int most_used_box = -1;
+    for (const auto& [box_id, count] : box_usage) {
+        if (count > max_usage) {
+            max_usage = count;
+            most_used_box = box_id;
+        }
+    }
+
+    // Try to move rectangles from other boxes to the most used box
+    if (most_used_box != -1) {
+        auto target_grid = occupancy_grids[most_used_box];
+
+        for (int i = 0; i < n && nbs.size() < MAX_NEIGHBORS; i++) {
+            if (solution[i].box_id == most_used_box) continue;
+
+            const auto& rect = solution[i];
+
+            // Try to find a spot in the target box
+            for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
+                for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
+                    if (target_grid[y * L + x]) continue;
+
+                    for (int rot = 0; rot < 2; rot++) {
+                        if (rot == 1 && rect.width == rect.height) continue;
+
+                        int w = (rot == 0) ? rect.width : rect.height;
+                        int h = (rot == 0) ? rect.height : rect.width;
+
+                        if (x + w > L || y + h > L) continue;
+
+                        bool can_place = true;
+                        for (int dx = 0; dx < w && can_place; dx++) {
+                            for (int dy = 0; dy < h && can_place; dy++) {
+                                if (target_grid[(y + dy) * L + (x + dx)]) {
+                                    can_place = false;
+                                }
+                            }
+                        }
+
+                        if (can_place) {
+                            auto neighbor = solution;
+                            neighbor[i].box_id = most_used_box;
+                            neighbor[i].x = x;
+                            neighbor[i].y = y;
+                            neighbor[i].rotated = (rot == 1);
+                            nbs.push_back(neighbor);
+                            break;
+                        }
+                    }
+                    if (nbs.size() < MAX_NEIGHBORS) break;
+                }
+                if (nbs.size() < MAX_NEIGHBORS) break;
+            }
+        }
+    }
+
+    // STRATEGY 4: Try to empty boxes by moving all rectangles out of sparsely used boxes
+    std::cout << "Generating box-emptying moves...\n";
+
+    // Find boxes with few rectangles (potential candidates to empty)
+    std::vector<int> sparse_boxes;
+    for (const auto& [box_id, count] : box_usage) {
+        if (count <= 3 && count > 0) { // Boxes with 3 or fewer rectangles
+            sparse_boxes.push_back(box_id);
+        }
+    }
+
+    // For each sparse box, try to move its rectangles to other boxes
+    for (int sparse_box : sparse_boxes) {
+        if (nbs.size() >= MAX_NEIGHBORS) break;
+
+        // Find all rectangles in this sparse box
+        std::vector<int> rects_in_sparse_box;
+        for (int i = 0; i < n; i++) {
+            if (solution[i].box_id == sparse_box) {
+                rects_in_sparse_box.push_back(i);
+            }
+        }
+
+        // Try to move each rectangle to other boxes
+        for (int rect_idx : rects_in_sparse_box) {
+            if (nbs.size() >= MAX_NEIGHBORS) break;
+
+            const auto& rect = solution[rect_idx];
+
+            for (int target_box : used_boxes) {
+                if (nbs.size() >= MAX_NEIGHBORS) break;
+                if (target_box == sparse_box) continue;
+
+                auto target_grid = occupancy_grids[target_box];
+
+                // Try to place in target box
+                for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
+                    for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
+                        if (target_grid[y * L + x]) continue;
+
+                        for (int rot = 0; rot < 2; rot++) {
+                            if (rot == 1 && rect.width == rect.height) continue;
+
+                            int w = rect.get_actual_width();
+                            int h = rect.get_actual_height();
+
+                            if (x + w > L || y + h > L) continue;
+
+                            bool can_place = true;
+                            for (int dx = 0; dx < w && can_place; dx++) {
+                                for (int dy = 0; dy < h && can_place; dy++) {
+                                    if (target_grid[(y + dy) * L + (x + dx)]) {
+                                        can_place = false;
+                                    }
+                                }
+                            }
+
+                            if (can_place) {
+                                auto neighbor = solution;
+                                neighbor[rect_idx].box_id = target_box;
+                                neighbor[rect_idx].x = x;
+                                neighbor[rect_idx].y = y;
+                                neighbor[rect_idx].rotated = (rot == 1);
+                                nbs.push_back(neighbor);
+                                break;
+                            }
+                        }
+                        if (nbs.size() < MAX_NEIGHBORS) break;
+                    }
+                    if (nbs.size() < MAX_NEIGHBORS) break;
+                }
+            }
+        }
+    }
+
+    std::cout << "Generated " << nbs.size() << " minimal-box neighbors ("
+              << total_used_boxes << " boxes currently used)\n";
 
     return nbs;
 }
-
-
 
