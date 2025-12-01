@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cmath>
+#include <set>
 
 #include "solver/RectangleFittingProblemSolver.h"
 
@@ -49,87 +50,103 @@ public:
         int L = problem.get_box_length();
         if (current_solution.empty()) return current_solution;
 
+        std::cout << "\n=== RERUN START ===" << std::endl;
+        std::cout << "Total rectangles: " << current_solution.size() << std::endl;
+
         // 1. Calculate Utilization per Box
         std::unordered_map<int, double> box_util_map;
+        std::unordered_map<int, int> box_rect_count;
         long long box_capacity = (long long)L * L;
 
         for (const auto& r : current_solution) {
             box_util_map[r.box_id] += (double)(r.width * r.height);
+            box_rect_count[r.box_id]++;
         }
 
-        // 2. Identify "Locked" boxes (High utilization) vs "Active" boxes
-        // We lower the threshold slightly to ensure we don't lock moderately bad boxes
-        double lock_threshold = 0.92;
+        // Print all boxes and their status
+        std::cout << "All boxes:" << std::endl;
+        for (const auto& [box_id, area] : box_util_map) {
+            double util = area / box_capacity;
+            std::cout << "  Box " << box_id << ": " << box_rect_count[box_id]
+                      << " rectangles, " << (util * 100) << "% utilization"
+                      << (util >= 0.85 ? " [LOCKED]" : " [ACTIVE]") << std::endl;
+        }
+
+        // 2. Identify "Locked" boxes (>85% utilization) vs "Active" boxes
+        double lock_threshold = 0.85;
         std::vector<RectanglePlacement> locked;
         std::vector<RectanglePlacement> active;
+        std::set<int> active_box_ids;
+        std::set<int> locked_box_ids;
 
         for (const auto& r : current_solution) {
             double util = box_util_map[r.box_id] / box_capacity;
-            if (util >= lock_threshold)
+            if (util >= lock_threshold) {
                 locked.push_back(r);
-            else
+                locked_box_ids.insert(r.box_id);
+            } else {
                 active.push_back(r);
+                active_box_ids.insert(r.box_id);
+            }
         }
 
-        if (active.size() < std::max(3, (int)(current_solution.size() * 0.10))) {
-             if (active.empty()) return current_solution;
+        // Print active box IDs
+        std::cout << "\nActive box IDs: ";
+        if (active_box_ids.empty()) {
+            std::cout << "NONE";
+        } else {
+            for (int box_id : active_box_ids) {
+                std::cout << box_id << " ";
+            }
+        }
+        std::cout << std::endl;
+
+        std::cout << "Locked box IDs: ";
+        if (locked_box_ids.empty()) {
+            std::cout << "NONE";
+        } else {
+            for (int box_id : locked_box_ids) {
+                std::cout << box_id << " ";
+            }
+        }
+        std::cout << std::endl;
+
+        std::cout << "Locked rectangles: " << locked.size()
+                  << " (in " << locked_box_ids.size() << " boxes)" << std::endl;
+        std::cout << "Active rectangles: " << active.size()
+                  << " (in " << active_box_ids.size() << " boxes)" << std::endl;
+
+        // If no active rectangles, return current solution
+        if (active.empty()) {
+            std::cout << "No active rectangles to optimize" << std::endl;
+            return current_solution;
         }
 
-        // 3. SOLVE or SPLIT
+        // 3. SOLVE or SPLIT based on max_rectangle_in_subproblem
         std::vector<RectanglePlacement> optimized_active;
 
         if ((int)active.size() <= max_rectangle_in_subproblem) {
+            std::cout << "Solving " << active.size() << " active rectangles directly" << std::endl;
+
             RectangleFittingProblem sub(L, active);
 
-            // Run a few passes of local search
-            // (Assumes apply_local_search runs your neighborhood logic)
             auto current_sub = sub.get_current_solution();
-            for(int k=0; k<5; k++) {
+            for(int k = 0; k < 5; k++) {
                 current_sub = apply_local_search(sub, current_sub);
                 sub.set_current_solution(current_sub);
             }
             optimized_active = sub.get_current_solution();
         }
         else {
-            // Group active rects by box
-            std::unordered_map<int, std::vector<RectanglePlacement>> rects_by_box;
-            for (const auto& r : active) {
-                rects_by_box[r.box_id].push_back(r);
-            }
+            std::cout << "Splitting " << active.size() << " active rectangles (exceeds limit of "
+                      << max_rectangle_in_subproblem << ")" << std::endl;
 
-            // Create a list of boxes sorted by utilization (Ascending)
-            // We want the emptiest boxes (15%, 20%) to be at the front
-            std::vector<std::pair<double, int>> sorted_boxes;
-            for (const auto& [bid, _] : rects_by_box) {
-                double u = box_util_map[bid] / box_capacity;
-                sorted_boxes.push_back({u, bid});
-            }
-            std::sort(sorted_boxes.begin(), sorted_boxes.end());
+            // Split into two groups
+            int mid = active.size() / 2;
+            std::vector<RectanglePlacement> group1(active.begin(), active.begin() + mid);
+            std::vector<RectanglePlacement> group2(active.begin() + mid, active.end());
 
-            // Distribute into groups
-            // Group 1 gets the "trash" (lowest util boxes) so they can be merged.
-            std::vector<RectanglePlacement> group1, group2;
-            int count_g1 = 0;
-            int target = active.size() / 2;
-
-            for (const auto& pair : sorted_boxes) {
-                int bid = pair.second;
-                auto& box_content = rects_by_box[bid];
-
-                if (count_g1 < target) {
-                    group1.insert(group1.end(), box_content.begin(), box_content.end());
-                    count_g1 += box_content.size();
-                } else {
-                    group2.insert(group2.end(), box_content.begin(), box_content.end());
-                }
-            }
-
-            // Fallback for edge cases (e.g. one massive box vs many small ones)
-            if (group1.empty() || group2.empty()) {
-                int mid = active.size() / 2;
-                group1 = std::vector<RectanglePlacement>(active.begin(), active.begin() + mid);
-                group2 = std::vector<RectanglePlacement>(active.begin() + mid, active.end());
-            }
+            std::cout << "Split into: " << group1.size() << " and " << group2.size() << " rectangles" << std::endl;
 
             // Recursive Solve
             RectangleFittingProblem p1(L, group1);
@@ -144,15 +161,47 @@ public:
         }
 
         // 4. Final Merge
+        std::cout << "\nMerging results..." << std::endl;
+
+        // Give optimized active rectangles new box IDs to avoid conflicts with locked boxes
+        int max_locked_box_id = -1;
+        for (const auto& r : locked) {
+            if (r.box_id > max_locked_box_id) {
+                max_locked_box_id = r.box_id;
+            }
+        }
+
+        std::cout << "Max locked box ID: " << max_locked_box_id << std::endl;
+        std::cout << "Remapping active rectangle box IDs..." << std::endl;
+
+        for (auto& r : optimized_active) {
+            r.box_id += (max_locked_box_id + 1);
+        }
+
         reset_move_ids(optimized_active);
         auto merged = locked;
         merged.insert(merged.end(), optimized_active.begin(), optimized_active.end());
         reset_move_ids(merged);
 
+        // Verify rectangle count
+        if (merged.size() != current_solution.size()) {
+            std::cout << "ERROR: Lost rectangles! Original: " << current_solution.size()
+                      << ", Merged: " << merged.size() << std::endl;
+            return current_solution;
+        }
+
+        // Print final box count
+        std::unordered_set<int> final_boxes;
+        for (const auto& r : merged) {
+            final_boxes.insert(r.box_id);
+        }
+        std::cout << "Final boxes: " << final_boxes.size() << std::endl;
+        std::cout << "=== RERUN END ===\n" << std::endl;
+
         return merged;
     }
 
-    // Helper for GUI stepping
+
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {
         std::vector<RectanglePlacement> solution = problem.get_current_solution();
         auto neighbors = construct_neighbors(problem);
@@ -184,8 +233,8 @@ protected:
 
 std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
                                                    std::vector<RectanglePlacement> initial,
-                                                   int max_iterations = 100,
-                                                   int max_non_improving = 10) {
+                                                   int max_iterations = 1000,
+                                                   int max_non_improving = 2) {
     auto current_solution = initial;
     int current_obj = problem.objective(current_solution);
 
@@ -233,7 +282,8 @@ std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &prob
             std::cout << "No improvement found (" << non_improving_count
                       << "/" << max_non_improving << ")" << std::endl;
 
-            return best_sol;
+            // DON'T return early - continue to use up the non-improving count
+            // This allows for some exploration even without immediate improvement
         }
     }
 

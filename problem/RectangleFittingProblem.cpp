@@ -10,18 +10,20 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 }
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
-    // SIMPLIFIED PARAMETERS - Less is more
+    // SIMPLIFIED PARAMETERS
     const int BOX_PENALTY = 10000;      // Dominant penalty per box
     const int OVERLAP_PENALTY = 50;     // Per unit area
     const int UTILIZATION_BONUS = 300;  // Reward for high utilization
-    const int TOUCHING_BONUS = 2;       // Per unit length of touching edges
+    const int TOUCHING_OTHER_BONUS = 5; // Per unit length of touching other rectangles
+    const int TOUCHING_SURFACE_BONUS = 2; // Per unit length of touching box boundaries
 
     if (current_solution.empty()) return 0;
 
     std::unordered_set<int> boxes_used;
     std::unordered_map<int, long long> box_area_used;
     long long total_overlap_area = 0;
-    long long total_touching_length = 0;
+    long long total_touching_other_length = 0;
+    long long total_touching_surface_length = 0;
 
     // 1. Calculate box usage, overlaps, and touching lengths
     for (size_t i = 0; i < current_solution.size(); ++i) {
@@ -32,17 +34,17 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         int w1 = r1.get_actual_width();
         int h1 = r1.get_actual_height();
 
-        // Check for touching box boundaries (edges of the bounding box)
+        // Check for touching box boundaries (surface touching)
         // Left edge touches box boundary
-        if (r1.x == 0) total_touching_length += h1;
+        if (r1.x == 0) total_touching_surface_length += h1;
         // Right edge touches box boundary
-        if (r1.x + w1 == L) total_touching_length += h1;
+        if (r1.x + w1 == L) total_touching_surface_length += h1;
         // Bottom edge touches box boundary
-        if (r1.y == 0) total_touching_length += w1;
+        if (r1.y == 0) total_touching_surface_length += w1;
         // Top edge touches box boundary
-        if (r1.y + h1 == L) total_touching_length += w1;
+        if (r1.y + h1 == L) total_touching_surface_length += w1;
 
-        // Check overlaps and adjacencies with other rectangles in same box
+        // Check overlaps and adjacencies with other rectangles
         for (size_t j = i + 1; j < current_solution.size(); ++j) {
             const auto& r2 = current_solution[j];
             if (r1.box_id != r2.box_id) continue;
@@ -57,7 +59,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
                 total_overlap_area += (long long)(overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1);
             }
 
-            // Check for touching/adjacency
+            // Check for touching/adjacency (rectangle-to-rectangle touching)
             if (r1.adjacent(r2)) {
                 // Calculate touching length for adjacent rectangles
                 int w2 = r2.get_actual_width();
@@ -77,13 +79,13 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
                 if (right1 == left2 || left1 == right2) {
                     int overlap_top = std::min(top1, top2);
                     int overlap_bottom = std::max(bottom1, bottom2);
-                    total_touching_length += std::max(0, overlap_top - overlap_bottom);
+                    total_touching_other_length += std::max(0, overlap_top - overlap_bottom);
                 }
                 // Horizontal adjacency (top/bottom touching)
                 else if (top1 == bottom2 || bottom1 == top2) {
                     int overlap_right = std::min(right1, right2);
                     int overlap_left = std::max(left1, left2);
-                    total_touching_length += std::max(0, overlap_right - overlap_left);
+                    total_touching_other_length += std::max(0, overlap_right - overlap_left);
                 }
             }
         }
@@ -100,12 +102,13 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
         utilization_bonus += util * util * UTILIZATION_BONUS;
     }
 
-    // 3. Final score - now includes touching bonus
+    // 3. Final score
     long long score =
         -num_boxes * BOX_PENALTY +    // Fewer boxes is better
         utilization_bonus -           // Higher utilization is better
         total_overlap_area * OVERLAP_PENALTY + // Overlaps are bad
-        total_touching_length * TOUCHING_BONUS; // Touching is good
+        total_touching_other_length * TOUCHING_OTHER_BONUS + // Rectangle touching is good
+        total_touching_surface_length * TOUCHING_SURFACE_BONUS; // Surface touching is also good
 
     // 4. Add temperature-based escape from local optima
     if (T > 0) {
