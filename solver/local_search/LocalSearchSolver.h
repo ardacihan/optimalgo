@@ -22,12 +22,12 @@ public:
     std::vector<RectanglePlacement>
     solve(RectangleFittingProblem &problem,
           int num_reruns,
-          int max_rectangle_in_subproblem) override
+          int max_rectangle_in_subproblem, int T) override
     {
         RectangleFittingProblem working = problem;
 
         for (int i = 0; i < num_reruns; ++i) {
-            auto result = solve_with_reruns(working, num_reruns, max_rectangle_in_subproblem);
+            auto result = solve_with_reruns(working, num_reruns, max_rectangle_in_subproblem,T);
             std::cout << "Run" << i << std::endl;
             working.set_current_solution(result);
         }
@@ -44,7 +44,7 @@ public:
     std::vector<RectanglePlacement>
     solve_with_reruns(RectangleFittingProblem &problem,
                       int num_reruns,
-                      int max_rectangle_in_subproblem) override
+                      int max_rectangle_in_subproblem, int T) override
     {
         std::vector<RectanglePlacement> current_solution = problem.get_current_solution();
         int L = problem.get_box_length();
@@ -132,7 +132,7 @@ public:
 
             auto current_sub = sub.get_current_solution();
             for(int k = 0; k < 5; k++) {
-                current_sub = apply_local_search(sub, current_sub);
+                current_sub = apply_local_search(sub, current_sub, T);
                 sub.set_current_solution(current_sub);
             }
             optimized_active = sub.get_current_solution();
@@ -152,8 +152,8 @@ public:
             RectangleFittingProblem p1(L, group1);
             RectangleFittingProblem p2(L, group2);
 
-            auto s1 = solve_with_reruns(p1, std::max(1, num_reruns - 1), max_rectangle_in_subproblem);
-            auto s2 = solve_with_reruns(p2, std::max(1, num_reruns - 1), max_rectangle_in_subproblem);
+            auto s1 = solve_with_reruns(p1, std::max(1, num_reruns - 1), max_rectangle_in_subproblem, T);
+            auto s2 = solve_with_reruns(p2, std::max(1, num_reruns - 1), max_rectangle_in_subproblem, T);
 
             // Merge results
             optimized_active = s1;
@@ -204,7 +204,7 @@ public:
 
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {
         std::vector<RectanglePlacement> solution = problem.get_current_solution();
-        auto neighbors = construct_neighbors(problem);
+        auto neighbors = construct_neighbors(problem, T);
 
         if (neighbors.empty()) return solution;
 
@@ -229,14 +229,15 @@ public:
 
 protected:
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
-        RectangleFittingProblem &problem) = 0;
+        RectangleFittingProblem &problem, int T) = 0;
 
 std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
                                                    std::vector<RectanglePlacement> initial,
                                                    int max_iterations = 1000,
-                                                   int max_non_improving = 2) {
+                                                   int max_non_improving = 3, int T = 1000) {
     auto current_solution = initial;
-    int current_obj = problem.objective(current_solution);
+    // Pass initial temperature (max_iterations) to objective
+    int current_obj = problem.objective(current_solution, max_iterations);
 
     std::vector<RectanglePlacement> best_sol = current_solution;
     int best_obj = current_obj;
@@ -244,19 +245,27 @@ std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &prob
     int non_improving_count = 0;
 
     for (int iter = 0; iter < max_iterations && non_improving_count < max_non_improving; iter++) {
-        std::cout << "Local Search Iteration " << iter
-                  << ", Current Objective: " << current_obj << std::endl;
+        // Calculate remaining iterations as temperature
+        int remaining_iterations = max_iterations - iter;
 
-        auto neighbors = construct_neighbors(problem);
-        if (neighbors.empty()) break;
+        // Pass remaining iterations as temperature to neighbor construction
+        auto neighbors = construct_neighbors(problem, remaining_iterations);
+
+        // DEBUG: Check if we got neighbors
+        if (neighbors.empty()) {
+            std::cout << "WARNING: No neighbors generated at iteration " << iter
+                      << " (T=" << remaining_iterations << ")" << std::endl;
+            non_improving_count++;
+            continue;
+        }
 
         bool improved = false;
         int best_neighbor_obj = current_obj;
         std::vector<RectanglePlacement> best_neighbor = current_solution;
 
-        // Find best neighbor
         for (auto &n : neighbors) {
-            int obj = problem.objective(n);
+            // Pass remaining iterations as temperature to objective
+            int obj = problem.objective(n, remaining_iterations);
             if (obj > best_neighbor_obj) {
                 best_neighbor_obj = obj;
                 best_neighbor = n;
@@ -271,24 +280,22 @@ std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &prob
             if (current_obj > best_obj) {
                 best_sol = current_solution;
                 best_obj = current_obj;
-                non_improving_count = 0; // Reset counter on improvement
-                std::cout << "New best objective: " << best_obj << std::endl;
+                non_improving_count = 0;
+                std::cout << "Iteration " << iter << " (T=" << remaining_iterations
+                          << "): New best objective: " << best_obj << std::endl;
             }
 
-            // Update problem state for next neighborhood construction
             problem.set_current_solution(current_solution);
         } else {
             non_improving_count++;
-            std::cout << "No improvement found (" << non_improving_count
+            std::cout << "Iteration " << iter << " (T=" << remaining_iterations
+                      << "): No improvement (" << non_improving_count
                       << "/" << max_non_improving << ")" << std::endl;
-
-            // DON'T return early - continue to use up the non-improving count
-            // This allows for some exploration even without immediate improvement
         }
     }
 
     std::cout << "Local search finished. Best objective: " << best_obj
-              << " (improvement: " << (best_obj - problem.objective(initial))
+              << " (improvement: " << (best_obj - problem.objective(initial, max_iterations))
               << ")" << std::endl;
 
     return best_sol;

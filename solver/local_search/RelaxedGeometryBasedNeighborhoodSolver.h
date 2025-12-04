@@ -7,22 +7,32 @@
 class RelaxedGeometryBasedNeighborhoodSolver : public GeometryBasedNeighborhoodSolver {
 public:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
-        RectangleFittingProblem &problem) override;
-
+        RectangleFittingProblem &problem, int T) override;
 
 private:
     std::vector<std::vector<RectanglePlacement>> construct_overlapping_neighbors(
         RectangleFittingProblem &problem, int T);
 
-    // Temperature-based parameter calculations
-    double calculate_max_overlap_ratio(int T);
-    int calculate_max_overlap_area(int T, int L);
-    int calculate_overlap_offset(int T, int rect_size);
-    int calculate_perturbation_range(int T);
+    // Helper function for quadrant perturbation
+    std::vector<RectanglePlacement> generate_quadrant_perturbation(
+        const std::vector<RectanglePlacement>& solution,
+        int L, int T);
 
+    // Helper function for swap moves
+    std::vector<RectanglePlacement> generate_swap_move(
+        const std::vector<RectanglePlacement>& solution,
+        int L, int T);
+
+    // Helper function for random spread (for high temperatures)
+    std::vector<RectanglePlacement> generate_random_spread(
+        const std::vector<RectanglePlacement>& solution,
+        int L, int T);
+
+    // Helper to calculate total overlap in a solution
+    long long calculate_total_overlap(
+        const std::vector<RectanglePlacement>& solution);
 };
 
 void reset_relaxed_temperature();
-
 
 #endif // RELAXED_GEOMETRY_BASED_NEIGHBORHOOD_SOLVER_H

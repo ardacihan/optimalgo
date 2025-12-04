@@ -21,10 +21,10 @@ public:
     virtual ~RectangleFittingProblemSolver() {}
 
     virtual std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns,
-                                                  int max_rectangle_in_subproblem) {return std::vector<RectanglePlacement>();};
+                                                  int max_rectangle_in_subproblem, int T) {return std::vector<RectanglePlacement>();};
 
     virtual std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int num_reruns,
-                                      int max_rectangle_in_subproblem) {return std::vector<RectanglePlacement>();};
+                                      int max_rectangle_in_subproblem, int T) {return std::vector<RectanglePlacement>();};
 
     double get_utilization_threshold() const {
         return 0.75;
@@ -57,7 +57,7 @@ public:
     std::vector<RectanglePlacement> filter_and_rerun(const std::vector<RectanglePlacement>& full_solution,
                                                      int L,
                                                      int remaining_reruns,
-                                                     int max_rect_sub) {
+                                                     int max_rect_sub, int T) {
 
         // 1. Identify Broken Boxes (Overlaps)
         // Even if utilization is high, an overlap makes the box "Bad".
@@ -119,7 +119,7 @@ public:
 
         // IMPORTANT: Recursively solve again.
         // This gives the solver a chance to fix the overlaps at a lower recursion depth.
-        auto optimized_bad_part = solve_with_reruns(retry_problem, remaining_reruns, max_rect_sub);
+        auto optimized_bad_part = solve_with_reruns(retry_problem, remaining_reruns, max_rect_sub,T);
 
         return safe_merge(kept_good_rects, optimized_bad_part);
     }

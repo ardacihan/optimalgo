@@ -11,7 +11,7 @@
 
 std::vector<std::vector<RectanglePlacement>>
 GeometryBasedNeighborhoodSolver::construct_neighbors(
-    RectangleFittingProblem &problem)
+    RectangleFittingProblem &problem, int T)
 {
     std::vector<std::vector<RectanglePlacement>> nbs;
     auto solution = problem.get_current_solution();
@@ -19,7 +19,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 200;
+    const int MAX_NEIGHBORS = 800;
 
     // Precompute occupancy and box usage
     std::unordered_map<int, std::vector<bool>> occupancy_grids;

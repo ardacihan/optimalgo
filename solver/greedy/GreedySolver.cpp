@@ -3,7 +3,7 @@
 
 std::vector<RectanglePlacement> GreedySolver::solve(RectangleFittingProblem &problem,
                                                    int num_reruns,
-                                                   int max_rectangle_in_subproblem) {
+                                                   int max_rectangle_in_subproblem, int T) {
     if (current_strategy == 0) {
         return solve_biggest_first(problem);
     } else if (current_strategy == 1) {
@@ -75,8 +75,8 @@ std::vector<RectanglePlacement> GreedySolver::solve_smallest_first(RectangleFitt
 
 std::vector<RectanglePlacement> GreedySolver::solve_with_reruns(RectangleFittingProblem &problem,
                                                                int num_reruns,
-                                                               int max_rectangle_in_subproblem) {
-    return solve(problem, num_reruns, max_rectangle_in_subproblem);
+                                                               int max_rectangle_in_subproblem, int T) {
+    return solve(problem, num_reruns, max_rectangle_in_subproblem,T);
 }
 
 RectanglePlacement GreedySolver::place_rectangle(RectangleFittingProblem &problem,

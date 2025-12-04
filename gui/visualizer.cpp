@@ -168,18 +168,18 @@ void RectangleVisualizer::runSolver() {
                 if (!geometry_solver) {
                     geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
                 }
-                result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+                result = geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem,gui_config.T);
             } else if (gui_config.local_search_strategy == 1) {
                 if (!permutation_solver) {
                     permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
                 }
-                result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+                result = permutation_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem,gui_config.T);
             } else {
                 if (!relaxed_geometry_solver) {
                     relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
                 }
                 reset_relaxed_temperature();
-                result = relaxed_geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+                result = relaxed_geometry_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem,gui_config.T);
             }
         } else { // Greedy Solver
             if (!greedy_solver) {
@@ -187,7 +187,7 @@ void RectangleVisualizer::runSolver() {
             }
 
             greedy_solver->set_selection_strategy(gui_config.greedy_strategy);
-            result = greedy_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem);
+            result = greedy_solver->solve(problem, gui_config.num_reruns, gui_config.max_rectangle_in_subproblem,gui_config.T);
         }
 
         {
@@ -230,7 +230,7 @@ void RectangleVisualizer::solveNextStep() {
         }
 
         greedy_solver->set_selection_strategy(gui_config.greedy_strategy);
-        auto result = greedy_solver->solve(problem, 1, gui_config.max_rectangle_in_subproblem);
+        auto result = greedy_solver->solve(problem, 1, gui_config.max_rectangle_in_subproblem,gui_config.T);
         current_placements = result;
         problem.set_current_solution(result);
     }
@@ -391,7 +391,11 @@ void RectangleVisualizer::render() {
     ImGui::BeginDisabled(is_solving);
     if (ImGui::Button("Solve Next Step")) solveNextStep();
     ImGui::SameLine();
-    if (ImGui::Button("Run Solver")) runSolver();
+    if (ImGui::Button("Run Solver")) {
+        gui_config.T = 1000;
+        runSolver();
+    }
+
     ImGui::SameLine();
     if (ImGui::Button("Revert")) revertToOriginal();
     ImGui::EndDisabled();

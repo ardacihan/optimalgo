@@ -8,7 +8,7 @@
 class RuleBasedNeighborhoodSolver : public LocalSearchSolver {
 protected:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
-        RectangleFittingProblem &problem) override;
+        RectangleFittingProblem &problem, int T) override;
 
 private:
     std::vector<RectanglePlacement> apply_greedy_placement_indexed(

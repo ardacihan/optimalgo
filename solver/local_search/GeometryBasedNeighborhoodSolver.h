@@ -8,7 +8,7 @@
 class GeometryBasedNeighborhoodSolver : public LocalSearchSolver {
 protected:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
-        RectangleFittingProblem &problem) override;
+        RectangleFittingProblem &problem, int T) override;
 };
 
 #endif // GEOMETRYBASEDNEIGHBORHOODSOLVER_H

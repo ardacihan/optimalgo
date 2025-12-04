@@ -9,10 +9,10 @@
 class GreedySolver : public RectangleFittingProblemSolver {
 public:
     std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns,
-                                          int max_rectangle_in_subproblem) override;
+                                          int max_rectangle_in_subproblem, int T) override;
 
     std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int num_reruns,
-                                      int max_rectangle_in_subproblem) override;
+                                      int max_rectangle_in_subproblem, int T) override;
 
     // Simple strategy selection
     // 0 = biggest first, 1 = smallest first

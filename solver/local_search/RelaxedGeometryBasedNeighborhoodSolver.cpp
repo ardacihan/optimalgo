@@ -1,30 +1,127 @@
 #include "RelaxedGeometryBasedNeighborhoodSolver.h"
-#include "problem/BoxOccupancyUtil.h"
 #include <cmath>
 #include <random>
-#include <set>
 #include <algorithm>
+#include <unordered_map>
+#include <set>
 
-static int current_relaxed_temperature = 1000;
-
-void reset_relaxed_temperature() {
-    current_relaxed_temperature = 1000;
+std::vector<std::vector<RectanglePlacement>>
+RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors(
+    RectangleFittingProblem &problem, int T) {
+    return construct_overlapping_neighbors(problem, T);
 }
 
-std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors(
-    RectangleFittingProblem &problem) {
+// Helper: Calculate total overlap area in a solution
+long long RelaxedGeometryBasedNeighborhoodSolver::calculate_total_overlap(
+    const std::vector<RectanglePlacement>& solution) {
 
-    auto neighbors = construct_overlapping_neighbors(problem, current_relaxed_temperature);
+    long long total_overlap = 0;
+    int n = solution.size();
 
-    // Decrease temperature after generating neighbors
-    if (current_relaxed_temperature > 0) {
-        current_relaxed_temperature = std::max(0, current_relaxed_temperature - 50);
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (solution[i].box_id != solution[j].box_id) continue;
+
+            const auto& r1 = solution[i];
+            const auto& r2 = solution[j];
+
+            int overlap_x1 = std::max(r1.x, r2.x);
+            int overlap_y1 = std::max(r1.y, r2.y);
+            int overlap_x2 = std::min(r1.x + r1.get_actual_width(),
+                                     r2.x + r2.get_actual_width());
+            int overlap_y2 = std::min(r1.y + r1.get_actual_height(),
+                                     r2.y + r2.get_actual_height());
+
+            if (overlap_x1 < overlap_x2 && overlap_y1 < overlap_y2) {
+                total_overlap += (long long)(overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1);
+            }
+        }
     }
 
-    return neighbors;
+    return total_overlap;
 }
 
-std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
+// Helper: Generate random spread (used at high temperatures)
+std::vector<RectanglePlacement>
+RelaxedGeometryBasedNeighborhoodSolver::generate_random_spread(
+    const std::vector<RectanglePlacement>& solution,
+    int L, int T) {
+
+    auto spread_solution = solution;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> pos_dist(0, L-1);
+
+    double spread_factor = T / 1000.0;
+
+    for (auto& rect : spread_solution) {
+        rect.x = pos_dist(gen);
+        rect.y = pos_dist(gen);
+
+        if (rect.width != rect.height && (rand() % 100) < (T / 10)) {
+            rect.rotated = !rect.rotated;
+        }
+
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        if (rect.x + w > L) rect.x = L - w;
+        if (rect.y + h > L) rect.y = L - h;
+    }
+
+    return spread_solution;
+}
+
+// Helper: Generate swap move between boxes
+std::vector<RectanglePlacement>
+RelaxedGeometryBasedNeighborhoodSolver::generate_swap_move(
+    const std::vector<RectanglePlacement>& solution,
+    int L, int T) {
+
+    auto swapped_solution = solution;
+    int n = solution.size();
+    if (n < 2) return swapped_solution;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> rect_dist(0, n-1);
+    std::uniform_int_distribution<> pos_dist(0, L-1);
+
+    int i = rect_dist(gen);
+    int j = rect_dist(gen);
+    while (i == j) j = rect_dist(gen);
+
+    auto& rect1 = swapped_solution[i];
+    auto& rect2 = swapped_solution[j];
+
+    std::swap(rect1.box_id, rect2.box_id);
+
+    rect1.x = pos_dist(gen);
+    rect1.y = pos_dist(gen);
+    rect2.x = pos_dist(gen);
+    rect2.y = pos_dist(gen);
+
+    if (rect1.width != rect1.height && (rand() % 100) < (T / 20)) {
+        rect1.rotated = !rect1.rotated;
+    }
+    if (rect2.width != rect2.height && (rand() % 100) < (T / 20)) {
+        rect2.rotated = !rect2.rotated;
+    }
+
+    int w1 = rect1.get_actual_width();
+    int h1 = rect1.get_actual_height();
+    int w2 = rect2.get_actual_width();
+    int h2 = rect2.get_actual_height();
+
+    if (rect1.x + w1 > L) rect1.x = L - w1;
+    if (rect1.y + h1 > L) rect1.y = L - h1;
+    if (rect2.x + w2 > L) rect2.x = L - w2;
+    if (rect2.y + h2 > L) rect2.y = L - h2;
+
+    return swapped_solution;
+}
+
+std::vector<std::vector<RectanglePlacement>>
+RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
     RectangleFittingProblem &problem, int T) {
 
     std::vector<std::vector<RectanglePlacement>> nbs;
@@ -33,202 +130,203 @@ std::vector<std::vector<RectanglePlacement>> RelaxedGeometryBasedNeighborhoodSol
     int n = solution.size();
     if (n == 0) return nbs;
 
-    // 1. CALCULATE ALLOWED OVERLAP BASED ON TEMPERATURE (T)
-    // As T decreases, allowed_overlap approaches 0 (Hard constraints)
-    long long allowed_overlap_area = calculate_max_overlap_area(T, L);
+    const int MAX_NEIGHBORS = 500;
 
-    int MAX_NEIGHBORS = 100;
-    nbs.reserve(MAX_NEIGHBORS);
+    std::cout << "\n=== RELAXED GEOMETRY SOLVER (T=" << T << ") ===" << std::endl;
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    long long initial_overlap = calculate_total_overlap(solution);
+    std::cout << "Initial overlap: " << initial_overlap << std::endl;
 
-    // --- Box Data Setup (Same as before) ---
-    std::unordered_map<int, BoxData> box_data;
-    for (int i = 0; i < n; i++) {
-        int box_id = solution[i].box_id;
-        auto it = box_data.find(box_id);
-        if (it == box_data.end()) {
-            box_data.emplace(std::piecewise_construct,
-                            std::forward_as_tuple(box_id),
-                            std::forward_as_tuple(L, 100));
-            it = box_data.find(box_id);
-        }
-        it->second.rect_indices.push_back(i);
-        it->second.total_area += (long long)solution[i].get_actual_width() * solution[i].get_actual_height();
+    // ======================================
+    // KEY FIX: Temperature-based strategy
+    // High T (>700): More exploration
+    // Mid T (300-700): Balanced
+    // Low T (<300): Heavy exploitation
+    // ======================================
+
+    double exploration_ratio = std::min(1.0, T / 700.0);  // 0.0 to 1.0
+    double exploitation_ratio = 1.0 - exploration_ratio;
+
+    std::cout << "Exploration ratio: " << exploration_ratio
+              << ", Exploitation ratio: " << exploitation_ratio << std::endl;
+
+    // PHASE 1: CALL PARENT'S GEOMETRY-BASED MOVES FIRST
+    // These are GOOD moves that don't create overlaps
+    auto geometry_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors(problem, T);
+
+    // FIX: Use MORE geometry moves at LOW temperature
+    int num_geometry_moves = std::min(
+        (int)geometry_neighbors.size(),
+        (int)(MAX_NEIGHBORS * (0.5 + 0.5 * exploitation_ratio))  // 50%-100% based on T
+    );
+
+    for (int i = 0; i < num_geometry_moves && nbs.size() < MAX_NEIGHBORS; i++) {
+        nbs.push_back(geometry_neighbors[i]);
     }
 
-    std::vector<std::pair<int, double>> box_utilizations;
-    for (const auto& [box_id, data] : box_data) {
-        double utilization = (double)data.total_area / (double)(L * L);
-        box_utilizations.push_back({box_id, utilization});
+    std::cout << "Added " << nbs.size() << " geometry-based moves (from "
+              << geometry_neighbors.size() << " available)" << std::endl;
+
+    // PHASE 2: EXPLORATION MOVES (only at high temperatures)
+    int exploration_moves = 0;
+
+    // A. Random spread moves (only at very high T)
+    if (T > 800) {
+        int num_spreads = std::min(2, MAX_NEIGHBORS - (int)nbs.size());
+        for (int i = 0; i < num_spreads; i++) {
+            nbs.push_back(generate_random_spread(solution, L, T));
+            exploration_moves++;
+        }
     }
 
-    std::sort(box_utilizations.begin(), box_utilizations.end(),
-              [](const auto& a, const auto& b) { return a.second < b.second; });
-
-    auto add_neighbor = [&](std::vector<RectanglePlacement>& nb) {
-        if (nbs.size() < MAX_NEIGHBORS) {
-            nbs.push_back(std::move(nb));
-            return true;
+    // B. Swap moves between boxes (at high-mid T)
+    if (T > 500) {
+        int num_swaps = std::min(1 + T / 500, MAX_NEIGHBORS - (int)nbs.size());
+        for (int i = 0; i < num_swaps; i++) {
+            nbs.push_back(generate_swap_move(solution, L, T));
+            exploration_moves++;
         }
-        return false;
-    };
+    }
 
-    // 2. NEW HELPER: Calculate Intersection Area
-    auto calculate_intersection = [&](const RectanglePlacement& r1, const RectanglePlacement& r2) -> long long {
-        int x_overlap = std::max(0, std::min(r1.x + r1.get_actual_width(), r2.x + r2.get_actual_width()) - std::max(r1.x, r2.x));
-        int y_overlap = std::max(0, std::min(r1.y + r1.get_actual_height(), r2.y + r2.get_actual_height()) - std::max(r1.y, r2.y));
-        return (long long)x_overlap * y_overlap;
-    };
+    std::cout << "Added " << exploration_moves << " exploration moves" << std::endl;
 
-    // 3. UPDATED CHECKER: Returns true if overlap is within allowed limit
-    auto is_valid_relaxed = [&](const RectanglePlacement& r, int box_id,
-                                const std::vector<RectanglePlacement>& sol, int skip_idx) -> bool {
-        long long current_overlap = 0;
+    // PHASE 3: AGGRESSIVE OVERLAP RESOLUTION (at ALL temperatures if overlaps exist)
+    if (initial_overlap > 0) {
+        int resolution_moves = 0;
+        int max_resolution = std::min(50, MAX_NEIGHBORS - (int)nbs.size());
 
-        for (int i = 0; i < (int)sol.size(); i++) {
-            if (i == skip_idx) continue;
-            if (sol[i].box_id != box_id) continue;
-
-            // Check if they intersect
-            current_overlap += calculate_intersection(r, sol[i]);
-
-            // Optimization: Fail early if we exceed the limit
-            if (current_overlap > allowed_overlap_area) return false;
+        // Group rectangles by box
+        std::unordered_map<int, std::vector<int>> box_rects;
+        for (int i = 0; i < n; i++) {
+            box_rects[solution[i].box_id].push_back(i);
         }
-        return true;
-    };
 
-    // --- Generation Loops ---
+        // For each box, find and resolve overlaps
+        for (const auto& [box_id, rect_indices] : box_rects) {
+            if (resolution_moves >= max_resolution) break;
 
-    // LOOP 1: Move from sparse to target
-    for (size_t i = 0; i < box_utilizations.size() && nbs.size() < MAX_NEIGHBORS; i++) {
-        // ... (existing selection logic) ...
-        int sparse_box_id = box_utilizations[i].first;
-        if (box_utilizations[i].second > 0.7) break;
+            // Find ALL pairs of overlapping rectangles
+            std::vector<std::pair<int, int>> overlapping_pairs;
+            for (size_t i = 0; i < rect_indices.size(); i++) {
+                for (size_t j = i + 1; j < rect_indices.size(); j++) {
+                    const auto& r1 = solution[rect_indices[i]];
+                    const auto& r2 = solution[rect_indices[j]];
+                    if (r1.collides(r2)) {
+                        overlapping_pairs.push_back({rect_indices[i], rect_indices[j]});
+                    }
+                }
+            }
 
-        auto sparse_it = box_data.find(sparse_box_id);
-        if (sparse_it == box_data.end()) continue;
-        auto indices = sparse_it->second.rect_indices;
-        std::shuffle(indices.begin(), indices.end(), gen);
+            // Try to resolve each overlapping pair
+            for (const auto& [idx1, idx2] : overlapping_pairs) {
+                if (resolution_moves >= max_resolution) break;
 
-        int max_rects_to_move = std::min(5, (int)indices.size());
+                const auto& rect1 = solution[idx1];
+                const auto& rect2 = solution[idx2];
 
-        for (int rect_num = 0; rect_num < max_rects_to_move && nbs.size() < MAX_NEIGHBORS; rect_num++) {
-            int idx = indices[rect_num];
-            const auto& rect = solution[idx];
-            long long rect_area = rect.get_actual_width() * rect.get_actual_height();
+                // Try moving rect1 away from rect2
+                for (int attempt = 0; attempt < 5 && resolution_moves < max_resolution; attempt++) {
+                    auto neighbor = solution;
+                    auto& rect = neighbor[idx1];
 
-            for (size_t j = box_utilizations.size() - 1; j > i && nbs.size() < MAX_NEIGHBORS; j--) {
-                int target_box_id = box_utilizations[j].first;
-                // ... (existing target checks) ...
-                if (target_box_id == sparse_box_id) continue;
-                auto target_it = box_data.find(target_box_id);
-                if (target_it == box_data.end()) continue;
+                    // Calculate direction away from rect2
+                    int center1_x = rect1.x + rect1.get_actual_width() / 2;
+                    int center1_y = rect1.y + rect1.get_actual_height() / 2;
+                    int center2_x = rect2.x + rect2.get_actual_width() / 2;
+                    int center2_y = rect2.y + rect2.get_actual_height() / 2;
 
-                // Allow slightly more aggressive filling if T is high
-                if (target_it->second.total_area + rect_area > (long long)L * L * 0.95) continue;
+                    int dx = center1_x - center2_x;
+                    int dy = center1_y - center2_y;
 
-                for (int attempt = 0; attempt < 15 && nbs.size() < MAX_NEIGHBORS; attempt++) {
-                    for (int rot = 0; rot < 2; rot++) {
-                        RectanglePlacement moved = rect;
-                        moved.box_id = target_box_id;
-                        if (rot == 1) moved.rotated = !moved.rotated;
+                    // Normalize and scale
+                    double dist = sqrt(dx*dx + dy*dy);
+                    if (dist > 0) {
+                        dx = (int)(dx / dist * (10 + attempt * 5));
+                        dy = (int)(dy / dist * (10 + attempt * 5));
+                    }
 
-                        int max_x = L - moved.get_actual_width();
-                        int max_y = L - moved.get_actual_height();
-                        if (max_x < 0 || max_y < 0) continue;
+                    int new_x = rect.x + dx;
+                    int new_y = rect.y + dy;
 
-                        std::uniform_int_distribution<> dist_x(0, max_x);
-                        std::uniform_int_distribution<> dist_y(0, max_y);
+                    // Clamp to bounds
+                    int w = rect.get_actual_width();
+                    int h = rect.get_actual_height();
+                    new_x = std::max(0, std::min(L - w, new_x));
+                    new_y = std::max(0, std::min(L - h, new_y));
 
-                        moved.x = dist_x(gen);
-                        moved.y = dist_y(gen);
+                    rect.x = new_x;
+                    rect.y = new_y;
 
-                        auto nb = solution;
-                        nb[idx] = moved;
+                    // Check if this REDUCES overlap
+                    long long new_overlap = calculate_total_overlap(neighbor);
+                    if (new_overlap < initial_overlap) {
+                        nbs.push_back(neighbor);
+                        resolution_moves++;
+                        break;
+                    }
 
-                        // USE THE NEW RELAXED CHECK
-                        if (is_valid_relaxed(moved, target_box_id, nb, idx)) {
-                            add_neighbor(nb);
+                    // Try rotation if applicable
+                    if (rect.width != rect.height) {
+                        rect.rotated = !rect.rotated;
+                        w = rect.get_actual_width();
+                        h = rect.get_actual_height();
+                        if (rect.x + w > L) rect.x = L - w;
+                        if (rect.y + h > L) rect.y = L - h;
+
+                        new_overlap = calculate_total_overlap(neighbor);
+                        if (new_overlap < initial_overlap) {
+                            nbs.push_back(neighbor);
+                            resolution_moves++;
                             break;
                         }
                     }
                 }
             }
         }
+
+        std::cout << "Added " << resolution_moves << " overlap resolution moves" << std::endl;
     }
 
-    // LOOP 2: Shuffle within box
-    for (const auto& [box_id, data] : box_data) {
-        if (nbs.size() >= MAX_NEIGHBORS) break;
-        // ... (existing logic) ...
-        auto indices = data.rect_indices;
-        std::shuffle(indices.begin(), indices.end(), gen);
-        int max_shuffle = std::min(6, (int)indices.size());
+    // PHASE 4: Small random perturbations (always useful)
+    int perturbation_moves = 0;
+    int max_perturbations = std::min(20, MAX_NEIGHBORS - (int)nbs.size());
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> rect_dist(0, n-1);
 
-        for (int i = 0; i < max_shuffle && nbs.size() < MAX_NEIGHBORS; i++) {
-            int idx = indices[i];
-            const auto& rect = solution[idx];
+    for (int i = 0; i < max_perturbations; i++) {
+        auto neighbor = solution;
+        int rect_idx = rect_dist(gen);
+        auto& rect = neighbor[rect_idx];
 
-            int max_x = L - rect.get_actual_width();
-            int max_y = L - rect.get_actual_height();
-            if (max_x < 0 || max_y < 0) continue;
+        // Small move (smaller at low T)
+        int max_step = std::max(1, (int)(5.0 * exploration_ratio + 1));
+        int dx = (rand() % (2 * max_step + 1)) - max_step;
+        int dy = (rand() % (2 * max_step + 1)) - max_step;
 
-            std::uniform_int_distribution<> dist_x(0, max_x);
-            std::uniform_int_distribution<> dist_y(0, max_y);
+        int new_x = rect.x + dx;
+        int new_y = rect.y + dy;
 
-            for (int attempt = 0; attempt < 12 && nbs.size() < MAX_NEIGHBORS; attempt++) {
-                for (int rot = 0; rot < 2; rot++) {
-                    RectanglePlacement moved = rect;
-                    if (rot == 1) moved.rotated = !moved.rotated;
-                    // ... (existing random pos logic) ...
-                    int rot_max_x = L - moved.get_actual_width();
-                    int rot_max_y = L - moved.get_actual_height();
-                    if (rot_max_x < 0 || rot_max_y < 0) continue;
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        new_x = std::max(0, std::min(L - w, new_x));
+        new_y = std::max(0, std::min(L - h, new_y));
 
-                    std::uniform_int_distribution<> rot_dist_x(0, rot_max_x);
-                    std::uniform_int_distribution<> rot_dist_y(0, rot_max_y);
+        if (new_x != rect.x || new_y != rect.y) {
+            rect.x = new_x;
+            rect.y = new_y;
 
-                    moved.x = rot_dist_x(gen);
-                    moved.y = rot_dist_y(gen);
-
-                    auto nb = solution;
-                    nb[idx] = moved;
-
-                    // USE THE NEW RELAXED CHECK
-                    if (is_valid_relaxed(moved, box_id, nb, idx)) {
-                        add_neighbor(nb);
-                        break;
-                    }
-                }
+            // Only add if it doesn't make things worse
+            long long new_overlap = calculate_total_overlap(neighbor);
+            if (new_overlap <= initial_overlap * 1.1) {  // Allow 10% worse
+                nbs.push_back(neighbor);
+                perturbation_moves++;
             }
         }
     }
 
+    std::cout << "Added " << perturbation_moves << " perturbation moves" << std::endl;
+    std::cout << "Total neighbors generated: " << nbs.size() << std::endl;
+
     return nbs;
-}
-
-double RelaxedGeometryBasedNeighborhoodSolver::calculate_max_overlap_ratio(int T) {
-    if (T <= 0) return 0.0;
-    double max_ratio = 1.0 * (T / 1000.0);
-    return std::min(1.0, max_ratio);
-}
-
-int RelaxedGeometryBasedNeighborhoodSolver::calculate_max_overlap_area(int T, int L) {
-    if (T <= 0) return 0;
-    int base_area = (L * L) / 4;
-    return static_cast<int>(base_area * (T / 1000.0));
-}
-
-int RelaxedGeometryBasedNeighborhoodSolver::calculate_overlap_offset(int T, int rect_size) {
-    if (T <= 0) return 0;
-    int max_offset = rect_size;
-    return static_cast<int>(max_offset * (T / 1000.0));
-}
-
-int RelaxedGeometryBasedNeighborhoodSolver::calculate_perturbation_range(int T) {
-    if (T <= 0) return 0;
-    return 5 + static_cast<int>(15 * (T / 1000.0));
 }
