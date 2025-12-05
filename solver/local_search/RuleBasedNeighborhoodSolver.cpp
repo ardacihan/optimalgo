@@ -1,11 +1,11 @@
-//
 // RuleBasedNeighborhoodSolver.cpp
-//
 
 #include "RuleBasedNeighborhoodSolver.h"
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include <map>
+#include <set>
 
 bool collides_with_occupancy(int x, int y, int w, int h,
                            const std::vector<int>& grid, int L) {
@@ -29,21 +29,9 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
 
     if (rect_indices.empty()) return result;
 
-    // Create a mock problem
-    std::vector<RectanglePlacement> dummy_rects;
-    RectangleFittingProblem mock_problem(L, dummy_rects);
-
-    // Group rectangles by their original box_id (from the indices if available)
-    // If we don't have original box info, we'll use the order in the list
-    std::unordered_map<int, std::vector<int>> boxes_to_fill;
-    std::unordered_map<int, int> rect_to_box; // Map rectangle index to box_id
-
-    // We'll assign boxes based on the order in rect_indices
-    // First rectangle in list -> box 0, next new box when we can't fit, etc.
+    // We'll assign relative box IDs (0, 1, 2...) here
+    // These will be remapped to valid/original IDs in construct_neighbors
     int current_target_box = 0;
-    std::vector<int> current_box_rects;
-
-    // Initialize occupancy grids for boxes we'll use
     std::vector<std::vector<int>> occupancy_grids;
 
     // Start with first rectangle
@@ -56,7 +44,6 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
         bool placed = false;
 
         if (current_target_box < occupancy_grids.size()) {
-            // Box already has occupancy grid, try to place
             const auto& grid = occupancy_grids[current_target_box];
 
             // Try both orientations
@@ -66,15 +53,13 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
                 int h = (rot == 0) ? height : width;
                 if (w > L || h > L) continue;
 
-                // Search for empty spot in this box
+                // Search for empty spot
                 for (int y = 0; y <= L - h && !placed; y++) {
                     for (int x = 0; x <= L - w && !placed; x++) {
                         if (!collides_with_occupancy(x, y, w, h, grid, L)) {
-                            // Place it
                             result.push_back(RectanglePlacement(width, height, x, y, (rot == 1), current_target_box));
                             placed = true;
-
-                            // Mark as occupied
+                            // Mark occupied
                             auto& target_grid = occupancy_grids[current_target_box];
                             for (int py = y; py < y + h; py++) {
                                 for (int px = x; px < x + w; px++) {
@@ -86,24 +71,20 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
                 }
             }
         } else {
-            // This is the first rectangle for a new box
-            // Create occupancy grid for this box
+            // New Box
             while (current_target_box >= occupancy_grids.size()) {
                 occupancy_grids.push_back(std::vector<int>(L * L, -1));
             }
 
-            // Place at (0,0) if it fits
             int w = width;
             int h = height;
             bool rotated = false;
 
             if (w > L || h > L) {
-                // Try rotation
                 if (h <= L && w <= L && width != height) {
                     std::swap(w, h);
                     rotated = true;
                 } else {
-                    // Minify
                     w = std::min(width, L);
                     h = std::min(height, L);
                     if (w > L) w = L;
@@ -111,11 +92,9 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
                 }
             }
 
-            // Place at (0,0)
             result.push_back(RectanglePlacement(width, height, 0, 0, rotated, current_target_box));
             placed = true;
 
-            // Mark as occupied
             auto& target_grid = occupancy_grids[current_target_box];
             for (int py = 0; py < h; py++) {
                 for (int px = 0; px < w; px++) {
@@ -125,16 +104,13 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
         }
 
         if (!placed) {
-            // Couldn't place in current box, move to next box
             current_target_box++;
-            i--; // Retry this rectangle in the new box
+            i--;
         }
     }
 
     return result;
 }
-
-
 
 std::vector<std::vector<RectanglePlacement>>
 RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem, int T) {
@@ -144,45 +120,79 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 50;
+    const int MAX_NEIGHBORS = 100;
 
     if (n == 0) return neighbors;
 
-    // Build lookup table: index -> (width, height)
     std::vector<std::pair<int, int>> rect_dims(n);
     std::vector<int> rect_indices(n);
+    std::vector<int> original_box_ids(n);
+
+    // Track the highest ID used to generate safe new IDs for splits
+    int max_original_id = -1;
 
     for (int i = 0; i < n; i++) {
         rect_dims[i] = {solution[i].width, solution[i].height};
         rect_indices[i] = i;
+        original_box_ids[i] = solution[i].box_id;
+        if (solution[i].box_id > max_original_id) {
+            max_original_id = solution[i].box_id;
+        }
     }
 
-    // THE FIX: Make sure we're checking overlaps correctly
+    int next_free_id_base = max_original_id + 1;
+
     for (int i = 0; i < n && neighbors.size() < MAX_NEIGHBORS; i++) {
         for (int j = i + 1; j < n && neighbors.size() < MAX_NEIGHBORS; j++) {
+
+            // 1. Create neighbor by swapping order
             std::vector<int> reordered = rect_indices;
             std::swap(reordered[i], reordered[j]);
 
+            // 2. Apply greedy placement (returns box IDs 0, 1, 2...)
             auto new_solution = apply_greedy_placement_indexed(reordered, rect_dims, L);
 
-            // IMPORTANT: Check if greedy placement actually placed all rectangles
-            if (new_solution.size() != n) {
-                std::cout << "WARNING: Greedy placement lost rectangles! Expected "
-                          << n << ", got " << new_solution.size() << std::endl;
-                continue; // Skip invalid solution
+            if (new_solution.size() != n) continue;
+
+            // 3. REMAPPING LOGIC: Fix the Box IDs locally
+            // We map (RelativeID -> RealID)
+            std::map<int, int> relative_to_real_map;
+            std::set<int> used_real_ids;
+            int local_next_id = next_free_id_base;
+
+            // Loop through the new solution.
+            // Note: new_solution[k] corresponds to rectangle reordered[k]
+            for (size_t k = 0; k < new_solution.size(); k++) {
+                int relative_box_id = new_solution[k].box_id;
+                int original_rect_idx = reordered[k];
+                int original_id = original_box_ids[original_rect_idx];
+
+                // If we haven't assigned a Real ID to this Relative Box yet
+                if (relative_to_real_map.find(relative_box_id) == relative_to_real_map.end()) {
+
+                    // Try to give it the original ID of this rectangle
+                    if (used_real_ids.find(original_id) == used_real_ids.end()) {
+                        // Original ID is available! Use it.
+                        relative_to_real_map[relative_box_id] = original_id;
+                        used_real_ids.insert(original_id);
+                    } else {
+                        // Original ID is already taken (box split?), assign a deterministic new ID
+                        relative_to_real_map[relative_box_id] = local_next_id++;
+                        // No need to insert into used_real_ids as local_next_id increments uniquely
+                    }
+                }
+
+                // Apply the mapping
+                new_solution[k].box_id = relative_to_real_map[relative_box_id];
             }
 
-            // Check for overlaps - but IMPORTANT: Box IDs are LOCAL to this solution
+            // 4. Overlap Check (using valid IDs now)
             bool has_overlap = false;
             for (int k = 0; k < n && !has_overlap; k++) {
                 for (int l = k + 1; l < n && !has_overlap; l++) {
-                    // Only check if rectangles are in the SAME box
                     if (new_solution[k].box_id == new_solution[l].box_id) {
-                        // Use collides() which checks rectangle bounds
                         if (new_solution[k].collides(new_solution[l])) {
                             has_overlap = true;
-                            std::cout << "Overlap in neighbor: rects " << k << " and " << l
-                                      << " in box " << new_solution[k].box_id << std::endl;
                         }
                     }
                 }

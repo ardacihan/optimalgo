@@ -12,8 +12,8 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
     // SIMPLIFIED PARAMETERS - focused on what matters
     const int BOX_PENALTY = 10000;           // Strong penalty per box (minimize boxes)
-    const int TOUCHING_BONUS = 5;           // Bonus for rectangle-to-rectangle touching
-    const int SURFACE_BONUS = 2;            // Bonus for touching box boundaries
+    const int TOUCHING_BONUS = 2;           // Bonus for rectangle-to-rectangle touching
+    const int SURFACE_BONUS = 1;            // Bonus for touching box boundaries
 
     if (current_solution.empty()) return 0;
 
@@ -80,28 +80,35 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 
         // CRITICAL: Don't reward >100% utilization (means overlaps)
         if (utilization > 1.0) {
-            utilization = 0.0; // Dont reward if exceeding
+            utilization = 0.0; // Don't reward if exceeding
         }
 
         // Reward high utilization, but not over 100%
         // Quadratic reward: 50% util = 0.25, 100% util = 1.0
-        utilization_score += (long long)(utilization * utilization * 1000);
+        utilization_score += (long long)(utilization * utilization * 10000);
     }
 
     // 3. TEMPERATURE-DEPENDENT OVERLAP PENALTY
     // This is the key for simulated annealing:
-    // - At T=1000: Small or zero penalty (allow overlaps for exploration)
-    // - At T=0: High penalty (force overlap resolution)
+    // - Start with T=2000 for more exploration
+    // - Gradually decrease to T=0 for strict enforcement
 
-    double temperature_factor = T / 1000.0; // 1.0 at T=1000, 0.0 at T=0
+    double temperature_factor = T / 2000.0; // Changed from 1000 to 2000
 
-    // Dynamic penalty: starts at 0, increases to 10 as T decreases
-    int overlap_penalty_per_unit = 0;
-    if (T < 800) overlap_penalty_per_unit = 100;
-    if (T < 600) overlap_penalty_per_unit = 200;
-    if (T < 400) overlap_penalty_per_unit = 300;
-    if (T < 200) overlap_penalty_per_unit = 4000;
-    if (T < 50)  overlap_penalty_per_unit = 100000; // Very strict near the end
+    // More gradual penalty: starts at 0, increases gradually as T decreases
+    int overlap_penalty_per_unit = 10; // Small penalty at high T
+
+    if (T < 1800) overlap_penalty_per_unit = 20;
+    if (T < 1600) overlap_penalty_per_unit = 50;
+    if (T < 1400) overlap_penalty_per_unit = 100;
+    if (T < 1200) overlap_penalty_per_unit = 200;
+    if (T < 1000) overlap_penalty_per_unit = 500;
+    if (T < 800) overlap_penalty_per_unit = 1000;
+    if (T < 600) overlap_penalty_per_unit = 2000;
+    if (T < 400) overlap_penalty_per_unit = 5000;
+    if (T < 200) overlap_penalty_per_unit = 10000;
+    if (T < 100) overlap_penalty_per_unit = 50000; // Very strict near the end
+    if (T < 50)  overlap_penalty_per_unit = 1000000; // Force overlap resolution
 
     long long overlap_penalty = total_overlap_area * overlap_penalty_per_unit;
 
@@ -116,8 +123,11 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 
     // 5. Temperature-based exploration bonus (encourage trying different box counts)
     // At high T, we want to explore different numbers of boxes
-    if (T > 500) {
+    if (T > 800) {
         // Add small random component to avoid getting stuck
+        score += (rand() % 200) * temperature_factor;
+    } else if (T > 400) {
+        // Smaller random component at medium T
         score += (rand() % 100) * temperature_factor;
     }
 

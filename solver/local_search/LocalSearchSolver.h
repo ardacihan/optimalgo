@@ -1,6 +1,6 @@
 // Solver.h
 // Base class for rectangle packing solvers with "Filter & Rerun" optimization
-// Modified to run until local optimum is found
+// Refactored to properly implement iterative filter-solve-merge cycles
 
 #ifndef OPTIMALGO_SOLVER_H
 #define OPTIMALGO_SOLVER_H
@@ -12,216 +12,89 @@
 #include <iostream>
 #include <cmath>
 #include <set>
+#include <random>
 
 #include "solver/RectangleFittingProblemSolver.h"
 
 class LocalSearchSolver : public RectangleFittingProblemSolver {
+private:
+    std::random_device rd;
+    std::mt19937 gen;
+
 public:
+    LocalSearchSolver() : gen(rd()) {}
+
     virtual ~LocalSearchSolver() = default;
 
     std::vector<RectanglePlacement>
     solve(RectangleFittingProblem &problem,
           int num_reruns,
-          int max_rectangle_in_subproblem, int T) override
+          int max_rectangle_in_subproblem,
+          int T) override
     {
-        RectangleFittingProblem working = problem;
+        return solve(problem, num_reruns, max_rectangle_in_subproblem, T, 0.85);
+    }
 
-        for (int i = 0; i < num_reruns; ++i) {
-            auto result = solve_with_reruns(working, num_reruns, max_rectangle_in_subproblem,T);
-            std::cout << "Run" << i << std::endl;
-            working.set_current_solution(result);
+    std::vector<RectanglePlacement>
+    solve(RectangleFittingProblem &problem,
+          int num_reruns,
+          int max_rectangle_in_subproblem,
+          int T,
+          double lock_threshold)
+    {
+        auto current_solution = problem.get_current_solution();
+        if (current_solution.empty()) return current_solution;
+
+        std::cout << "\n=== STARTING ITERATIVE RERUN PROCESS ===" << std::endl;
+        std::cout << "Total rectangles: " << current_solution.size() << std::endl;
+        std::cout << "Lock threshold: " << (lock_threshold * 100) << "%" << std::endl;
+        std::cout << "Number of reruns: " << num_reruns << std::endl;
+
+        for (int rerun = 0; rerun < num_reruns; ++rerun) {
+            std::cout << "\n=== RERUN " << rerun << " ===" << std::endl;
+
+            // 1. Filter: separate locked vs active boxes
+            auto [locked, active] = filter_by_utilization(
+                current_solution, problem.get_box_length(), lock_threshold);
+
+            // If no active rectangles, we're done
+            if (active.empty()) {
+                std::cout << "No active rectangles remaining - stopping reruns" << std::endl;
+                break;
+            }
+
+            // 2. Re-solve: optimize active rectangles
+            auto optimized_active = solve_subproblem(
+                active, problem.get_box_length(),
+                max_rectangle_in_subproblem, T);
+
+            // 3. Merge: combine locked + optimized
+            current_solution = merge_solutions(locked, optimized_active);
+            problem.set_current_solution(current_solution);
+
+            // Print objective after this rerun
+            int obj = problem.objective(current_solution, T);
+            std::cout << "Objective after rerun " << rerun << ": " << obj << std::endl;
         }
 
-        return working.get_current_solution();
+        std::cout << "\n=== RERUN PROCESS COMPLETE ===" << std::endl;
+        return current_solution;
     }
-    void reset_move_ids(std::vector<RectanglePlacement>& sol) {
-        for (auto& r : sol)
-            r.move_id = -1;
-    }
-
-
 
     std::vector<RectanglePlacement>
     solve_with_reruns(RectangleFittingProblem &problem,
                       int num_reruns,
-                      int max_rectangle_in_subproblem, int T) override
+                      int max_rectangle_in_subproblem,
+                      int T) override
     {
-        std::vector<RectanglePlacement> current_solution = problem.get_current_solution();
-        int L = problem.get_box_length();
-        if (current_solution.empty()) return current_solution;
-
-        std::cout << "\n=== RERUN START ===" << std::endl;
-        std::cout << "Total rectangles: " << current_solution.size() << std::endl;
-
-        // 1. Calculate Utilization per Box
-        std::unordered_map<int, double> box_util_map;
-        std::unordered_map<int, int> box_rect_count;
-        long long box_capacity = (long long)L * L;
-
-        for (const auto& r : current_solution) {
-            box_util_map[r.box_id] += (double)(r.width * r.height);
-            box_rect_count[r.box_id]++;
-        }
-
-        // Print all boxes and their status
-        std::cout << "All boxes:" << std::endl;
-        for (const auto& [box_id, area] : box_util_map) {
-            double util = area / box_capacity;
-            std::cout << "  Box " << box_id << ": " << box_rect_count[box_id]
-                      << " rectangles, " << (util * 100) << "% utilization"
-                      << (util >= 0.85 ? " [LOCKED]" : " [ACTIVE]") << std::endl;
-        }
-
-        // 2. Identify "Locked" boxes (>85% utilization) vs "Active" boxes
-        double lock_threshold = 0.85;
-        std::vector<RectanglePlacement> locked;
-        std::vector<RectanglePlacement> active;
-        std::set<int> active_box_ids;
-        std::set<int> locked_box_ids;
-
-        for (const auto& r : current_solution) {
-            double util = box_util_map[r.box_id] / box_capacity;
-            if (util >= lock_threshold) {
-                locked.push_back(r);
-                locked_box_ids.insert(r.box_id);
-            } else {
-                active.push_back(r);
-                active_box_ids.insert(r.box_id);
-            }
-        }
-
-        // Print active box IDs
-        std::cout << "\nActive box IDs: ";
-        if (active_box_ids.empty()) {
-            std::cout << "NONE";
-        } else {
-            for (int box_id : active_box_ids) {
-                std::cout << box_id << " ";
-            }
-        }
-        std::cout << std::endl;
-
-        std::cout << "Locked box IDs: ";
-        if (locked_box_ids.empty()) {
-            std::cout << "NONE";
-        } else {
-            for (int box_id : locked_box_ids) {
-                std::cout << box_id << " ";
-            }
-        }
-        std::cout << std::endl;
-
-        std::cout << "Locked rectangles: " << locked.size()
-                  << " (in " << locked_box_ids.size() << " boxes)" << std::endl;
-        std::cout << "Active rectangles: " << active.size()
-                  << " (in " << active_box_ids.size() << " boxes)" << std::endl;
-
-        // If no active rectangles, return current solution
-        if (active.empty()) {
-            std::cout << "No active rectangles to optimize" << std::endl;
-            return current_solution;
-        }
-
-        // 3. SOLVE or SPLIT based on max_rectangle_in_subproblem
-        std::vector<RectanglePlacement> optimized_active;
-
-        if ((int)active.size() <= max_rectangle_in_subproblem) {
-            std::cout << "Solving " << active.size() << " active rectangles directly" << std::endl;
-
-            RectangleFittingProblem sub(L, active);
-
-            auto current_sub = sub.get_current_solution();
-
-            // Run until local optimum - keep applying local search until no improvement
-            bool improved = true;
-            int iteration = 0;
-            while (improved) {
-                iteration++;
-                auto previous_sub = current_sub;
-                int prev_obj = sub.objective(previous_sub, T);
-
-                current_sub = apply_local_search(sub, current_sub, T);
-                int new_obj = sub.objective(current_sub, T);
-
-                improved = (new_obj > prev_obj);
-
-                if (improved) {
-                    std::cout << "Rerun iteration " << iteration
-                              << ": objective improved from " << prev_obj
-                              << " to " << new_obj << std::endl;
-                    sub.set_current_solution(current_sub);
-                } else {
-                    std::cout << "Local optimum reached after " << iteration
-                              << " rerun iterations" << std::endl;
-                }
-            }
-
-            optimized_active = sub.get_current_solution();
-        }
-        else {
-            std::cout << "Splitting " << active.size() << " active rectangles (exceeds limit of "
-                      << max_rectangle_in_subproblem << ")" << std::endl;
-
-            // Split into two groups
-            int mid = active.size() / 2;
-            std::vector<RectanglePlacement> group1(active.begin(), active.begin() + mid);
-            std::vector<RectanglePlacement> group2(active.begin() + mid, active.end());
-
-            std::cout << "Split into: " << group1.size() << " and " << group2.size() << " rectangles" << std::endl;
-
-            // Recursive Solve
-            RectangleFittingProblem p1(L, group1);
-            RectangleFittingProblem p2(L, group2);
-
-            auto s1 = solve_with_reruns(p1, std::max(1, num_reruns - 1), max_rectangle_in_subproblem, T);
-            auto s2 = solve_with_reruns(p2, std::max(1, num_reruns - 1), max_rectangle_in_subproblem, T);
-
-            // Merge results
-            optimized_active = s1;
-            optimized_active.insert(optimized_active.end(), s2.begin(), s2.end());
-        }
-
-        // 4. Final Merge
-        std::cout << "\nMerging results..." << std::endl;
-
-        // Give optimized active rectangles new box IDs to avoid conflicts with locked boxes
-        int max_locked_box_id = -1;
-        for (const auto& r : locked) {
-            if (r.box_id > max_locked_box_id) {
-                max_locked_box_id = r.box_id;
-            }
-        }
-
-        std::cout << "Max locked box ID: " << max_locked_box_id << std::endl;
-        std::cout << "Remapping active rectangle box IDs..." << std::endl;
-
-        for (auto& r : optimized_active) {
-            r.box_id += (max_locked_box_id + 1);
-        }
-
-        reset_move_ids(optimized_active);
-        auto merged = locked;
-        merged.insert(merged.end(), optimized_active.begin(), optimized_active.end());
-        reset_move_ids(merged);
-
-        // Verify rectangle count
-        if (merged.size() != current_solution.size()) {
-            std::cout << "ERROR: Lost rectangles! Original: " << current_solution.size()
-                      << ", Merged: " << merged.size() << std::endl;
-            return current_solution;
-        }
-
-        // Print final box count
-        std::unordered_set<int> final_boxes;
-        for (const auto& r : merged) {
-            final_boxes.insert(r.box_id);
-        }
-        std::cout << "Final boxes: " << final_boxes.size() << std::endl;
-        std::cout << "=== RERUN END ===\n" << std::endl;
-
-        return merged;
+        // Legacy method - redirect to new solve
+        return solve(problem, num_reruns, max_rectangle_in_subproblem, T);
     }
 
+    void reset_move_ids(std::vector<RectanglePlacement>& sol) {
+        for (auto& r : sol)
+            r.move_id = -1;
+    }
 
     std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T = 1000) {
         std::vector<RectanglePlacement> solution = problem.get_current_solution();
@@ -229,12 +102,12 @@ public:
 
         if (neighbors.empty()) return solution;
 
-        int current_obj = (T < 1000) ? problem.objective(solution, T) : problem.objective(solution);
+        int current_obj = problem.objective(solution, T);
         std::vector<RectanglePlacement> best_neighbor = solution;
         int best_obj = current_obj;
 
         for (auto &n : neighbors) {
-            int obj = (T < 1000) ? problem.objective(n, T) : problem.objective(n);
+            int obj = problem.objective(n, T);
             if (obj > best_obj) {
                 best_obj = obj;
                 best_neighbor = n;
@@ -252,83 +125,320 @@ protected:
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem, int T) = 0;
 
-std::vector<RectanglePlacement> apply_local_search(RectangleFittingProblem &problem,
-                                                   std::vector<RectanglePlacement> initial,
-                                                   int max_iterations = 1000,
-                                                   int max_non_improving = 3, int T = 1000) {
-    auto current_solution = initial;
-    // Pass initial temperature (max_iterations) to objective
-    int current_obj = problem.objective(current_solution, max_iterations);
+    // Filter rectangles into locked (high utilization) and active (low utilization)
+    std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
+    filter_by_utilization(const std::vector<RectanglePlacement>& solution,
+                         int box_length,
+                         double lock_threshold)
+    {
+        // Calculate utilization per box
+        std::unordered_map<int, long long> box_area;
+        std::unordered_map<int, int> box_rect_count;
+        long long box_capacity = (long long)box_length * box_length;
 
-    std::vector<RectanglePlacement> best_sol = current_solution;
-    int best_obj = current_obj;
-
-    int non_improving_count = 0;
-    int iteration = 0;
-
-    // Continue until local optimum is found (no improving neighbors exist)
-    while (true) {
-        iteration++;
-
-        // Calculate remaining iterations as temperature
-        int remaining_iterations = (iteration < max_iterations) ? (max_iterations - iteration) : 1;
-
-        // Pass remaining iterations as temperature to neighbor construction
-        auto neighbors = construct_neighbors(problem, remaining_iterations);
-
-        // If no neighbors can be generated, local optimum reached
-        if (neighbors.empty()) {
-            std::cout << "No neighbors generated at iteration " << iteration
-                      << " - local optimum reached" << std::endl;
-            break;
+        for (const auto& r : solution) {
+            box_area[r.box_id] += (long long)r.width * r.height;
+            box_rect_count[r.box_id]++;
         }
 
-        bool improved = false;
-        int best_neighbor_obj = current_obj;
-        std::vector<RectanglePlacement> best_neighbor = current_solution;
+        // Print all boxes and their status
+        std::cout << "\nBox utilization analysis:" << std::endl;
+        std::set<int> locked_box_ids;
+        std::set<int> active_box_ids;
 
-        for (auto &n : neighbors) {
-            // Pass remaining iterations as temperature to objective
-            int obj = problem.objective(n, remaining_iterations);
-            if (obj > best_neighbor_obj) {
-                best_neighbor_obj = obj;
-                best_neighbor = n;
-                improved = true;
+        for (const auto& [box_id, area] : box_area) {
+            double util = (double)area / box_capacity;
+            bool is_locked = (util >= lock_threshold);
+
+            std::cout << "  Box " << box_id << ": " << box_rect_count[box_id]
+                      << " rectangles, " << (util * 100.0) << "% utilization"
+                      << (is_locked ? " [LOCKED]" : " [ACTIVE]") << std::endl;
+
+            if (is_locked) {
+                locked_box_ids.insert(box_id);
+            } else {
+                active_box_ids.insert(box_id);
             }
         }
 
-        if (improved) {
-            current_solution = best_neighbor;
-            current_obj = best_neighbor_obj;
+        // Separate rectangles
+        std::vector<RectanglePlacement> locked;
+        std::vector<RectanglePlacement> active;
 
-            if (current_obj > best_obj) {
-                best_sol = current_solution;
-                best_obj = current_obj;
-                non_improving_count = 0;
-                std::cout << "Iteration " << iteration << " (T=" << remaining_iterations
-                          << "): New best objective: " << best_obj << std::endl;
+        for (const auto& r : solution) {
+            double util = (double)box_area[r.box_id] / box_capacity;
+            if (util >= lock_threshold) {
+                locked.push_back(r);
+            } else {
+                active.push_back(r);
             }
-
-            problem.set_current_solution(current_solution);
-        } else {
-            // No improving neighbor found - local optimum reached
-            non_improving_count++;
-            std::cout << "Iteration " << iteration << " (T=" << remaining_iterations
-                      << "): No improvement - local optimum reached" << std::endl;
-            break;
         }
+
+        std::cout << "\nFiltering results:" << std::endl;
+        std::cout << "  Locked: " << locked.size() << " rectangles in "
+                  << locked_box_ids.size() << " boxes" << std::endl;
+        std::cout << "  Active: " << active.size() << " rectangles in "
+                  << active_box_ids.size() << " boxes" << std::endl;
+
+        return {locked, active};
     }
 
-    std::cout << "Local search finished after " << iteration << " iterations. Best objective: " << best_obj
-              << " (improvement: " << (best_obj - problem.objective(initial, max_iterations))
-              << ")" << std::endl;
+    // Solve a subproblem (possibly by splitting if too large)
+    std::vector<RectanglePlacement>
+    solve_subproblem(const std::vector<RectanglePlacement>& rectangles,
+                    int box_length,
+                    int max_rectangle_in_subproblem,
+                    int T)
+    {
+        std::cout << "\nSolving subproblem with " << rectangles.size() << " rectangles" << std::endl;
 
-    return best_sol;
-}
+        // Case 1: Small enough to solve directly
+        if ((int)rectangles.size() <= max_rectangle_in_subproblem) {
+            std::cout << "  Solving directly (within limit of " << max_rectangle_in_subproblem << ")" << std::endl;
 
+            RectangleFittingProblem sub(box_length, rectangles);
+            auto solution = sub.get_current_solution();
 
+            // Apply local search with proper cooling schedule
+            // More iterations for larger subproblems
+            int base_iterations = std::min(500, (int)rectangles.size() * 10);
+            solution = apply_local_search(sub, solution, base_iterations, 5, T);
 
+            return solution;
+        }
 
+        // Case 2: Too large - split and solve recursively
+        std::cout << "  Splitting (exceeds limit of " << max_rectangle_in_subproblem << ")" << std::endl;
+
+        auto [group1, group2] = split_rectangles(rectangles);
+
+        std::cout << "  Split into: " << group1.size() << " and " << group2.size() << " rectangles" << std::endl;
+
+        // Recursively solve each group
+        auto solution1 = solve_subproblem(group1, box_length, max_rectangle_in_subproblem, T);
+        auto solution2 = solve_subproblem(group2, box_length, max_rectangle_in_subproblem, T);
+
+        // Merge the two solutions
+        std::vector<RectanglePlacement> merged = solution1;
+        merged.insert(merged.end(), solution2.begin(), solution2.end());
+
+        return merged;
+    }
+
+    // Split rectangles into two groups (box-aware splitting)
+    std::pair<std::vector<RectanglePlacement>, std::vector<RectanglePlacement>>
+    split_rectangles(const std::vector<RectanglePlacement>& rectangles)
+    {
+        // Group rectangles by box ID
+        std::unordered_map<int, std::vector<RectanglePlacement>> box_groups;
+        for (const auto& r : rectangles) {
+            box_groups[r.box_id].push_back(r);
+        }
+
+        // If multiple boxes, split by box
+        if (box_groups.size() > 1) {
+            std::vector<int> box_ids;
+            for (const auto& [box_id, _] : box_groups) {
+                box_ids.push_back(box_id);
+            }
+            std::sort(box_ids.begin(), box_ids.end());
+
+            int mid = box_ids.size() / 2;
+            std::vector<RectanglePlacement> group1, group2;
+
+            for (int i = 0; i < (int)box_ids.size(); ++i) {
+                if (i < mid) {
+                    group1.insert(group1.end(),
+                                 box_groups[box_ids[i]].begin(),
+                                 box_groups[box_ids[i]].end());
+                } else {
+                    group2.insert(group2.end(),
+                                 box_groups[box_ids[i]].begin(),
+                                 box_groups[box_ids[i]].end());
+                }
+            }
+
+            return {group1, group2};
+        }
+
+        // Single box - split by size (large vs small)
+        std::vector<RectanglePlacement> sorted = rectangles;
+        std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+            return (a.width * a.height) > (b.width * b.height);
+        });
+
+        int mid = sorted.size() / 2;
+        std::vector<RectanglePlacement> group1(sorted.begin(), sorted.begin() + mid);
+        std::vector<RectanglePlacement> group2(sorted.begin() + mid, sorted.end());
+
+        return {group1, group2};
+    }
+
+    // Merge locked and optimized solutions, normalizing box IDs
+    std::vector<RectanglePlacement>
+    merge_solutions(const std::vector<RectanglePlacement>& locked,
+                   std::vector<RectanglePlacement> active)
+    {
+        std::cout << "\nMerging solutions..." << std::endl;
+
+        // Find max box ID in locked rectangles
+        int max_locked_box_id = -1;
+        for (const auto& r : locked) {
+            max_locked_box_id = std::max(max_locked_box_id, r.box_id);
+        }
+
+        std::cout << "  Max locked box ID: " << max_locked_box_id << std::endl;
+
+        // Remap active box IDs to avoid conflicts
+        std::unordered_map<int, int> box_id_mapping;
+        int next_box_id = max_locked_box_id + 1;
+
+        for (auto& r : active) {
+            if (box_id_mapping.find(r.box_id) == box_id_mapping.end()) {
+                box_id_mapping[r.box_id] = next_box_id++;
+            }
+            r.box_id = box_id_mapping[r.box_id];
+        }
+
+        std::cout << "  Remapped " << box_id_mapping.size() << " active box IDs" << std::endl;
+
+        // Combine
+        std::vector<RectanglePlacement> merged = locked;
+        merged.insert(merged.end(), active.begin(), active.end());
+
+        // Reset move IDs
+        reset_move_ids(merged);
+
+        // Count final boxes
+        std::unordered_set<int> final_boxes;
+        for (const auto& r : merged) {
+            final_boxes.insert(r.box_id);
+        }
+
+        std::cout << "  Final solution: " << merged.size() << " rectangles in "
+                  << final_boxes.size() << " boxes" << std::endl;
+
+        return merged;
+    }
+
+    std::vector<RectanglePlacement> apply_local_search(
+        RectangleFittingProblem &problem,
+        std::vector<RectanglePlacement> initial,
+        int max_iterations = 1000,
+        int max_non_improving = 5,
+        int T = 1000)
+    {
+        auto current_solution = initial;
+        int current_obj = problem.objective(current_solution, T);
+
+        std::vector<RectanglePlacement> best_sol = current_solution;
+        int best_obj = current_obj;
+
+        int non_improving_count = 0;
+        int iteration = 0;
+
+        std::cout << "    Starting local search (initial obj: " << current_obj << ")" << std::endl;
+
+        // Simulated annealing parameters
+        double start_temperature = T * 2.0; // Start hotter
+        double current_temperature = start_temperature;
+        double min_temperature = 1.0;
+        double cooling_rate = 0.95;
+
+        std::uniform_real_distribution<> dist(0.0, 1.0);
+
+        while (iteration < max_iterations && non_improving_count < max_non_improving) {
+            iteration++;
+
+            // Update temperature (exponential cooling)
+            current_temperature = start_temperature * std::pow(cooling_rate, iteration);
+            current_temperature = std::max(min_temperature, current_temperature);
+
+            int int_temperature = (int)current_temperature;
+
+            // Generate neighbors
+            auto neighbors = construct_neighbors(problem, int_temperature);
+
+            if (neighbors.empty()) {
+                std::cout << "    No neighbors at iteration " << iteration << std::endl;
+                break;
+            }
+
+            // Find best neighbor
+            int best_neighbor_obj = current_obj;
+            std::vector<RectanglePlacement> best_neighbor = current_solution;
+
+            for (auto &n : neighbors) {
+                int obj = problem.objective(n, int_temperature);
+                if (obj > best_neighbor_obj) {
+                    best_neighbor_obj = obj;
+                    best_neighbor = n;
+                }
+            }
+
+            // Decide whether to accept the move
+            bool accepted = false;
+
+            if (best_neighbor_obj > current_obj) {
+                // Always accept improving moves
+                accepted = true;
+            } else if (current_temperature > 50.0) {
+                // At high temperature, sometimes accept worse moves (simulated annealing)
+                double delta = current_obj - best_neighbor_obj;
+                double acceptance_probability = std::exp(-delta / current_temperature);
+
+                if (dist(gen) < acceptance_probability) {
+                    accepted = true;
+                    std::cout << "    Iteration " << iteration << " (T=" << int_temperature
+                              << "): accepted worse move (prob=" << acceptance_probability << ")" << std::endl;
+                }
+            }
+
+            if (accepted) {
+                current_solution = best_neighbor;
+                current_obj = best_neighbor_obj;
+
+                if (current_obj > best_obj) {
+                    best_sol = current_solution;
+                    best_obj = current_obj;
+                    non_improving_count = 0;
+                    std::cout << "    Iteration " << iteration << " (T=" << int_temperature
+                              << "): new best = " << best_obj << std::endl;
+                } else {
+                    non_improving_count++;
+                }
+
+                problem.set_current_solution(current_solution);
+            } else {
+                non_improving_count++;
+            }
+
+            // Occasionally diversify
+            if (non_improving_count >= 2 && current_temperature > 100.0) {
+                // Add some random noise to escape local optima
+                std::cout << "    Adding random perturbation at iteration " << iteration << std::endl;
+
+                // Shuffle a few rectangles
+                if (current_solution.size() > 3) {
+                    std::shuffle(current_solution.begin(), current_solution.begin() +
+                                std::min(5, (int)current_solution.size()), gen);
+
+                    // Re-evaluate
+                    current_obj = problem.objective(current_solution, int_temperature);
+                    problem.set_current_solution(current_solution);
+                    non_improving_count = 0;
+                }
+            }
+        }
+
+        int improvement = best_obj - problem.objective(initial, T);
+        std::cout << "    Local search finished after " << iteration
+                  << " iterations (best: " << best_obj
+                  << ", improvement: " << improvement
+                  << ", final T: " << (int)current_temperature << ")" << std::endl;
+
+        return best_sol;
+    }
 };
 
 #endif //OPTIMALGO_SOLVER_H
