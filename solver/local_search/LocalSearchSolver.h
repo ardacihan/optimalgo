@@ -57,7 +57,7 @@ solve(RectangleFittingProblem &problem,
     int max_reruns = std::max(1, num_reruns); // Ensure at least 1 rerun
 
     // Keep rerunning while we're improving AND under the limit
-    while (improved && rerun_count < max_reruns) {
+    while (rerun_count < max_reruns) {
         std::cout << "\n=== RERUN " << rerun_count << " ===" << std::endl;
 
         // Store previous solution for comparison
@@ -372,8 +372,8 @@ protected:
         // Simulated annealing parameters
         double start_temperature = T * 2.0; // Start hotter
         double current_temperature = start_temperature;
-        double min_temperature = 1.0;
-        double cooling_rate = 0.95;
+        double min_temperature = 0.0;
+        double cooling_rate = 0.96;
 
         std::uniform_real_distribution<> dist(0.0, 1.0);
 
