@@ -30,7 +30,7 @@ struct GUIConfig {
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
-    int num_reruns = 5;
+    int num_reruns = 100;
     int max_rectangle_in_subproblem = 200;
     int T = 1000;
 

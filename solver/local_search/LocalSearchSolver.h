@@ -35,51 +35,81 @@ public:
         return solve(problem, num_reruns, max_rectangle_in_subproblem, T, 0.85);
     }
 
-    std::vector<RectanglePlacement>
-    solve(RectangleFittingProblem &problem,
-          int num_reruns,
-          int max_rectangle_in_subproblem,
-          int T,
-          double lock_threshold)
-    {
-        auto current_solution = problem.get_current_solution();
-        if (current_solution.empty()) return current_solution;
+std::vector<RectanglePlacement>
+solve(RectangleFittingProblem &problem,
+      int num_reruns,
+      int max_rectangle_in_subproblem,
+      int T,
+      double lock_threshold)
+{
+    auto current_solution = problem.get_current_solution();
+    if (current_solution.empty()) return current_solution;
 
-        std::cout << "\n=== STARTING ITERATIVE RERUN PROCESS ===" << std::endl;
-        std::cout << "Total rectangles: " << current_solution.size() << std::endl;
-        std::cout << "Lock threshold: " << (lock_threshold * 100) << "%" << std::endl;
-        std::cout << "Number of reruns: " << num_reruns << std::endl;
+    int current_obj = problem.objective(current_solution, T);
+    std::cout << "\n=== STARTING ITERATIVE RERUN PROCESS ===" << std::endl;
+    std::cout << "Total rectangles: " << current_solution.size() << std::endl;
+    std::cout << "Initial objective: " << current_obj << std::endl;
+    std::cout << "Lock threshold: " << (lock_threshold * 100) << "%" << std::endl;
+    std::cout << "Maximum reruns: " << num_reruns << std::endl;
 
-        for (int rerun = 0; rerun < num_reruns; ++rerun) {
-            std::cout << "\n=== RERUN " << rerun << " ===" << std::endl;
+    bool improved = true;
+    int rerun_count = 0;
+    int max_reruns = std::max(1, num_reruns); // Ensure at least 1 rerun
 
-            // 1. Filter: separate locked vs active boxes
-            auto [locked, active] = filter_by_utilization(
-                current_solution, problem.get_box_length(), lock_threshold);
+    // Keep rerunning while we're improving AND under the limit
+    while (improved && rerun_count < max_reruns) {
+        std::cout << "\n=== RERUN " << rerun_count << " ===" << std::endl;
 
-            // If no active rectangles, we're done
-            if (active.empty()) {
-                std::cout << "No active rectangles remaining - stopping reruns" << std::endl;
-                break;
-            }
+        // Store previous solution for comparison
+        auto previous_solution = current_solution;
+        int previous_obj = current_obj;
 
-            // 2. Re-solve: optimize active rectangles
-            auto optimized_active = solve_subproblem(
-                active, problem.get_box_length(),
-                max_rectangle_in_subproblem, T);
+        // 1. Filter: separate locked vs active boxes
+        auto [locked, active] = filter_by_utilization(
+            current_solution, problem.get_box_length(), lock_threshold);
 
-            // 3. Merge: combine locked + optimized
-            current_solution = merge_solutions(locked, optimized_active);
-            problem.set_current_solution(current_solution);
-
-            // Print objective after this rerun
-            int obj = problem.objective(current_solution, T);
-            std::cout << "Objective after rerun " << rerun << ": " << obj << std::endl;
+        // If no active rectangles, we're done
+        if (active.empty()) {
+            std::cout << "No active rectangles remaining - stopping reruns" << std::endl;
+            break;
         }
 
-        std::cout << "\n=== RERUN PROCESS COMPLETE ===" << std::endl;
-        return current_solution;
+        // 2. Re-solve: optimize active rectangles
+        auto optimized_active = solve_subproblem(
+            active, problem.get_box_length(),
+            max_rectangle_in_subproblem, T);
+
+        // 3. Merge: combine locked + optimized
+        current_solution = merge_solutions(locked, optimized_active);
+        problem.set_current_solution(current_solution);
+
+        // 4. Calculate new objective
+        current_obj = problem.objective(current_solution, T);
+        std::cout << "Objective after rerun " << rerun_count << ": " << current_obj
+                  << " (previous: " << previous_obj << ")" << std::endl;
+
+        // 5. Check if we improved
+        if (current_obj > previous_obj) {
+            std::cout << "✓ Improved by " << (current_obj - previous_obj) << std::endl;
+            improved = true;
+        } else {
+            std::cout << "✗ No improvement - stopping reruns" << std::endl;
+            improved = false;
+            // Optional: revert to previous solution if no improvement
+            // current_solution = previous_solution;
+            // current_obj = previous_obj;
+            // problem.set_current_solution(current_solution);
+        }
+
+        rerun_count++;
     }
+
+    std::cout << "\n=== RERUN PROCESS COMPLETE ===" << std::endl;
+    std::cout << "Total reruns performed: " << rerun_count << std::endl;
+    std::cout << "Final objective: " << current_obj << std::endl;
+
+    return current_solution;
+}
 
     std::vector<RectanglePlacement>
     solve_with_reruns(RectangleFittingProblem &problem,

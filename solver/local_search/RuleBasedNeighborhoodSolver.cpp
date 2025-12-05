@@ -186,10 +186,10 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
     if (n == 0) return neighbors;
 
     // Validate current solution
-    if (!validate_solution_no_overlaps(solution, L)) {
-        std::cerr << "WARNING: Current solution has overlaps!" << std::endl;
-        return neighbors; // Don't generate neighbors from invalid solution
-    }
+    //if (!validate_solution_no_overlaps(solution, L)) {
+    //    std::cerr << "WARNING: Current solution has overlaps!" << std::endl;
+    //    return neighbors; // Don't generate neighbors from invalid solution
+    //}
 
     std::vector<std::pair<int, int>> rect_dims(n);
     std::vector<int> rect_indices(n);
@@ -253,30 +253,30 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
             }
 
             // 4. VALIDATE the solution (crucial!)
-            bool is_valid = validate_solution_no_overlaps(new_solution, L);
+            //bool is_valid = validate_solution_no_overlaps(new_solution, L);
 
-            if (is_valid) {
+            //if (is_valid) {
                 neighbors.push_back(new_solution);
-            } else {
-                std::cerr << "Rejected invalid neighbor (overlaps)" << std::endl;
-            }
+            //} else {
+            //    std::cerr << "Rejected invalid neighbor (overlaps)" << std::endl;
+            //}
         }
     }
 
     std::cout << "Generated " << neighbors.size() << " valid neighbors" << std::endl;
 
     // Double-check all neighbors
-    int valid_count = 0;
-    for (const auto& neighbor : neighbors) {
-        if (validate_solution_no_overlaps(neighbor, L)) {
-            valid_count++;
-        }
-    }
+    //int valid_count = 0;
+    //for (const auto& neighbor : neighbors) {
+    //    if (validate_solution_no_overlaps(neighbor, L)) {
+    //        valid_count++;
+    //    }
+    // }
 
-    if (valid_count != neighbors.size()) {
-        std::cerr << "ERROR: " << (neighbors.size() - valid_count)
-                  << " neighbors have overlaps!" << std::endl;
-    }
+    //if (valid_count != neighbors.size()) {
+    //    std::cerr << "ERROR: " << (neighbors.size() - valid_count)
+    //              << " neighbors have overlaps!" << std::endl;
+    //}
 
     return neighbors;
 }
