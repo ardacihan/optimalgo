@@ -6,6 +6,27 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <chrono>
+#include <cstdint>
+
+// Simple unique ID generator using timestamp
+class UniqueIDGenerator {
+private:
+    static uint64_t counter;
+
+public:
+    static uint64_t getUniqueID() {
+        // Use nanoseconds since epoch for uniqueness
+        auto now = std::chrono::high_resolution_clock::now();
+        auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count();
+
+        // Combine with counter for extra safety
+        return (nanos << 16) | (counter++ & 0xFFFF);
+    }
+};
+
+uint64_t UniqueIDGenerator::counter = 0;
 
 bool collides_with_occupancy(int x, int y, int w, int h,
                            const std::vector<int>& grid, int L) {
@@ -30,7 +51,6 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
     if (rect_indices.empty()) return result;
 
     // We'll assign relative box IDs (0, 1, 2...) here
-    // These will be remapped to valid/original IDs in construct_neighbors
     int current_target_box = 0;
     std::vector<std::vector<int>> occupancy_grids;
 
@@ -112,6 +132,47 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
     return result;
 }
 
+// Helper function to validate a solution has no overlaps
+bool validate_solution_no_overlaps(const std::vector<RectanglePlacement>& solution, int L) {
+    // Group by box_id
+    std::map<int, std::vector<const RectanglePlacement*>> boxes;
+    for (const auto& rect : solution) {
+        boxes[rect.box_id].push_back(&rect);
+    }
+
+    // Check each box for overlaps
+    for (const auto& [box_id, rects] : boxes) {
+        // Create occupancy grid for this box
+        std::vector<bool> grid(L * L, false);
+
+        for (const auto& rect : rects) {
+            int x = rect->x;
+            int y = rect->y;
+            int w = rect->get_actual_width();
+            int h = rect->get_actual_height();
+
+            // Check bounds
+            if (x < 0 || y < 0 || x + w > L || y + h > L) {
+                return false;
+            }
+
+            // Check for overlaps
+            for (int py = y; py < y + h; py++) {
+                for (int px = x; px < x + w; px++) {
+                    int index = py * L + px;
+                    if (grid[index]) {
+                        std::cerr << "Overlap detected in box " << box_id
+                                  << " at (" << px << "," << py << ")" << std::endl;
+                        return false;
+                    }
+                    grid[index] = true;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 std::vector<std::vector<RectanglePlacement>>
 RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem, int T) {
 
@@ -124,23 +185,31 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
 
     if (n == 0) return neighbors;
 
+    // Validate current solution
+    if (!validate_solution_no_overlaps(solution, L)) {
+        std::cerr << "WARNING: Current solution has overlaps!" << std::endl;
+        return neighbors; // Don't generate neighbors from invalid solution
+    }
+
     std::vector<std::pair<int, int>> rect_dims(n);
     std::vector<int> rect_indices(n);
     std::vector<int> original_box_ids(n);
 
-    // Track the highest ID used to generate safe new IDs for splits
-    int max_original_id = -1;
-
+    // Track used box IDs to avoid collisions
+    std::set<int> used_box_ids;
     for (int i = 0; i < n; i++) {
         rect_dims[i] = {solution[i].width, solution[i].height};
         rect_indices[i] = i;
         original_box_ids[i] = solution[i].box_id;
-        if (solution[i].box_id > max_original_id) {
-            max_original_id = solution[i].box_id;
-        }
+        used_box_ids.insert(solution[i].box_id);
     }
 
-    int next_free_id_base = max_original_id + 1;
+    // Find next available box ID (max + 1)
+    int max_box_id = 0;
+    for (int box_id : used_box_ids) {
+        if (box_id > max_box_id) max_box_id = box_id;
+    }
+    int next_box_id = max_box_id + 1;
 
     for (int i = 0; i < n && neighbors.size() < MAX_NEIGHBORS; i++) {
         for (int j = i + 1; j < n && neighbors.size() < MAX_NEIGHBORS; j++) {
@@ -154,31 +223,28 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
 
             if (new_solution.size() != n) continue;
 
-            // 3. REMAPPING LOGIC: Fix the Box IDs locally
-            // We map (RelativeID -> RealID)
+            // 3. SIMPLIFIED REMAPPING: Use ORIGINAL box IDs when possible,
+            // otherwise assign NEW UNIQUE box IDs
             std::map<int, int> relative_to_real_map;
-            std::set<int> used_real_ids;
-            int local_next_id = next_free_id_base;
+            std::set<int> assigned_real_ids;
 
-            // Loop through the new solution.
-            // Note: new_solution[k] corresponds to rectangle reordered[k]
+            // First pass: try to assign original box IDs
             for (size_t k = 0; k < new_solution.size(); k++) {
                 int relative_box_id = new_solution[k].box_id;
                 int original_rect_idx = reordered[k];
                 int original_id = original_box_ids[original_rect_idx];
 
-                // If we haven't assigned a Real ID to this Relative Box yet
                 if (relative_to_real_map.find(relative_box_id) == relative_to_real_map.end()) {
-
-                    // Try to give it the original ID of this rectangle
-                    if (used_real_ids.find(original_id) == used_real_ids.end()) {
-                        // Original ID is available! Use it.
+                    // This relative box hasn't been assigned a real ID yet
+                    if (assigned_real_ids.find(original_id) == assigned_real_ids.end()) {
+                        // Original ID is available, use it
                         relative_to_real_map[relative_box_id] = original_id;
-                        used_real_ids.insert(original_id);
+                        assigned_real_ids.insert(original_id);
                     } else {
-                        // Original ID is already taken (box split?), assign a deterministic new ID
-                        relative_to_real_map[relative_box_id] = local_next_id++;
-                        // No need to insert into used_real_ids as local_next_id increments uniquely
+                        // Original ID is taken, assign a NEW UNIQUE ID
+                        // Use time-based unique ID to guarantee no collisions
+                        relative_to_real_map[relative_box_id] = next_box_id++;
+                        assigned_real_ids.insert(relative_to_real_map[relative_box_id]);
                     }
                 }
 
@@ -186,24 +252,31 @@ RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &proble
                 new_solution[k].box_id = relative_to_real_map[relative_box_id];
             }
 
-            // 4. Overlap Check (using valid IDs now)
-            bool has_overlap = false;
-            for (int k = 0; k < n && !has_overlap; k++) {
-                for (int l = k + 1; l < n && !has_overlap; l++) {
-                    if (new_solution[k].box_id == new_solution[l].box_id) {
-                        if (new_solution[k].collides(new_solution[l])) {
-                            has_overlap = true;
-                        }
-                    }
-                }
-            }
+            // 4. VALIDATE the solution (crucial!)
+            bool is_valid = validate_solution_no_overlaps(new_solution, L);
 
-            if (!has_overlap) {
+            if (is_valid) {
                 neighbors.push_back(new_solution);
+            } else {
+                std::cerr << "Rejected invalid neighbor (overlaps)" << std::endl;
             }
         }
     }
 
     std::cout << "Generated " << neighbors.size() << " valid neighbors" << std::endl;
+
+    // Double-check all neighbors
+    int valid_count = 0;
+    for (const auto& neighbor : neighbors) {
+        if (validate_solution_no_overlaps(neighbor, L)) {
+            valid_count++;
+        }
+    }
+
+    if (valid_count != neighbors.size()) {
+        std::cerr << "ERROR: " << (neighbors.size() - valid_count)
+                  << " neighbors have overlaps!" << std::endl;
+    }
+
     return neighbors;
 }

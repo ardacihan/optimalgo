@@ -324,7 +324,7 @@ protected:
     std::vector<RectanglePlacement> apply_local_search(
         RectangleFittingProblem &problem,
         std::vector<RectanglePlacement> initial,
-        int max_iterations = 1000,
+        int max_iterations = 2000,
         int max_non_improving = 5,
         int T = 1000)
     {
@@ -347,7 +347,7 @@ protected:
 
         std::uniform_real_distribution<> dist(0.0, 1.0);
 
-        while (iteration < max_iterations && non_improving_count < max_non_improving) {
+        while (non_improving_count < max_non_improving) {
             iteration++;
 
             // Update temperature (exponential cooling)
@@ -382,16 +382,6 @@ protected:
             if (best_neighbor_obj > current_obj) {
                 // Always accept improving moves
                 accepted = true;
-            } else if (current_temperature > 50.0) {
-                // At high temperature, sometimes accept worse moves (simulated annealing)
-                double delta = current_obj - best_neighbor_obj;
-                double acceptance_probability = std::exp(-delta / current_temperature);
-
-                if (dist(gen) < acceptance_probability) {
-                    accepted = true;
-                    std::cout << "    Iteration " << iteration << " (T=" << int_temperature
-                              << "): accepted worse move (prob=" << acceptance_probability << ")" << std::endl;
-                }
             }
 
             if (accepted) {
@@ -411,23 +401,6 @@ protected:
                 problem.set_current_solution(current_solution);
             } else {
                 non_improving_count++;
-            }
-
-            // Occasionally diversify
-            if (non_improving_count >= 2 && current_temperature > 100.0) {
-                // Add some random noise to escape local optima
-                std::cout << "    Adding random perturbation at iteration " << iteration << std::endl;
-
-                // Shuffle a few rectangles
-                if (current_solution.size() > 3) {
-                    std::shuffle(current_solution.begin(), current_solution.begin() +
-                                std::min(5, (int)current_solution.size()), gen);
-
-                    // Re-evaluate
-                    current_obj = problem.objective(current_solution, int_temperature);
-                    problem.set_current_solution(current_solution);
-                    non_improving_count = 0;
-                }
             }
         }
 

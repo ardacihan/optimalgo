@@ -11,9 +11,9 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& cu
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& current_solution, int T) {
     // SIMPLIFIED PARAMETERS - focused on what matters
-    const int BOX_PENALTY = 10000;           // Strong penalty per box (minimize boxes)
-    const int TOUCHING_BONUS = 2;           // Bonus for rectangle-to-rectangle touching
-    const int SURFACE_BONUS = 1;            // Bonus for touching box boundaries
+    const int BOX_PENALTY = 1000000;           // Strong penalty per box (minimize boxes)
+    const int TOUCHING_BONUS = 5;           // Bonus for rectangle-to-rectangle touching
+    const int SURFACE_BONUS = 3;            // Bonus for touching box boundaries
 
     if (current_solution.empty()) return 0;
 
