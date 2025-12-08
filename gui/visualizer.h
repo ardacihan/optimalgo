@@ -21,17 +21,17 @@
 #include "../solver/greedy/GreedySolver.h"
 
 struct GUIConfig {
-    int rect_count = 400;
+    int rect_count = 1000;
     int box_size = 100;
     int min_width = 3;
-    int max_width = 50;
+    int max_width = 30;
     int min_height = 3;
-    int max_height = 50;
+    int max_height = 20;
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;
     int num_reruns = 3;
-    int max_rectangle_in_subproblem = 80;
+    int max_rectangle_in_subproblem = 100;
     int T = 2000;
 
     // Solver type selection
