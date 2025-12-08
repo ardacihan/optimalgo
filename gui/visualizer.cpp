@@ -389,10 +389,8 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
 
     ImGui::BeginDisabled(is_solving);
-    if (ImGui::Button("Solve Next Step")) solveNextStep();
-    ImGui::SameLine();
     if (ImGui::Button("Run Solver")) {
-        gui_config.T = 1000;
+        gui_config.T = 2000;
         runSolver();
     }
 
