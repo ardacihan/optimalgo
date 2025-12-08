@@ -50,55 +50,75 @@ public:
         return current_solution;
     }
 
-    std::vector<RectanglePlacement>
-    solve(RectangleFittingProblem &problem,
-          int num_reruns,
-          int max_rectangle_in_subproblem,
-          int T,
-          double lock_threshold)
-    {
-        auto current_solution = problem.get_current_solution();
-        if (current_solution.empty()) return current_solution;
+std::vector<RectanglePlacement>
+solve(RectangleFittingProblem &problem,
+      int num_reruns,
+      int max_rectangle_in_subproblem,
+      int T,
+      double lock_threshold)
+{
+    auto current_solution = problem.get_current_solution();
+    if (current_solution.empty()) return current_solution;
 
-        int current_obj = problem.objective(current_solution, T);
+    int current_obj = problem.objective(current_solution, T);
 
+    bool improved = true;
+    int rerun_count = 0;
+    int max_reruns = std::max(1, num_reruns);
 
-        bool improved = true;
-        int rerun_count = 0;
-        int max_reruns = std::max(1, num_reruns);
+    // ✅ Adaptive parameters
+    int current_max_subproblem = max_rectangle_in_subproblem;
+    int max_global_limit = (int)current_solution.size();   // hard ceiling
+    int growth_step = 5;                                   // how fast it grows
 
-        while (rerun_count < max_reruns) {
+    while (rerun_count < max_reruns) {
 
-            auto previous_solution = current_solution;
-            int previous_obj = current_obj;
+        auto previous_solution = current_solution;
+        int previous_obj = current_obj;
 
-            auto [locked, active] = filter_by_utilization(
-                current_solution, problem.get_box_length(), lock_threshold);
+        auto [locked, active] = filter_by_utilization(
+            current_solution, problem.get_box_length(), lock_threshold);
 
-            if (active.empty()) {
-                break;
-            }
-
-            auto optimized_active = solve_subproblem(
-                active, problem.get_box_length(),
-                max_rectangle_in_subproblem, T);
-
-            current_solution = merge_solutions(locked, optimized_active);
-            problem.set_current_solution(current_solution);
-
-            current_obj = problem.objective(current_solution, T);
-
-            if (current_obj > previous_obj) {
-                improved = true;
-            } else {
-                improved = false;
-            }
-
-            rerun_count++;
+        if (active.empty()) {
+            break;
         }
 
-        return current_solution;
+        auto optimized_active = solve_subproblem(
+            active,
+            problem.get_box_length(),
+            current_max_subproblem,   // ✅ ADAPTIVE VALUE
+            T
+        );
+
+        current_solution = merge_solutions(locked, optimized_active);
+        problem.set_current_solution(current_solution);
+
+        current_obj = problem.objective(current_solution, T);
+
+        if (current_obj > previous_obj) {
+            improved = true;
+
+            // ✅ Optional: tighten again after success
+            current_max_subproblem =
+                std::max(max_rectangle_in_subproblem,
+                         current_max_subproblem - growth_step);
+        }
+        else {
+            improved = false;
+
+            // ✅ CORE FEATURE: expand subproblem size
+            current_max_subproblem = std::min(
+                current_max_subproblem + growth_step,
+                max_global_limit
+            );
+        }
+
+        rerun_count++;
     }
+
+    return current_solution;
+}
+
 
     std::vector<RectanglePlacement>
     solve_with_reruns(RectangleFittingProblem &problem,
