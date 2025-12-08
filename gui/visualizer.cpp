@@ -200,41 +200,6 @@ void RectangleVisualizer::runSolver() {
     });
 }
 
-void RectangleVisualizer::solveNextStep() {
-    if (gui_config.solver_type == 0) { // Local Search
-        if (gui_config.local_search_strategy == 0) {
-            if (!geometry_solver) {
-                geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
-            }
-            auto result = geometry_solver->solve_one_step(problem);
-            current_placements = result;
-            problem.set_current_solution(result);
-        } else if (gui_config.local_search_strategy == 1) {
-            if (!permutation_solver) {
-                permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
-            }
-            auto result = permutation_solver->solve_one_step(problem);
-            current_placements = result;
-            problem.set_current_solution(result);
-        } else {
-            if (!relaxed_geometry_solver) {
-                relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
-            }
-            auto result = relaxed_geometry_solver->solve_one_step(problem);
-            current_placements = result;
-            problem.set_current_solution(result);
-        }
-    } else { // Greedy Solver
-        if (!greedy_solver) {
-            greedy_solver = std::make_unique<GreedySolver>();
-        }
-
-        greedy_solver->set_selection_strategy(gui_config.greedy_strategy);
-        auto result = greedy_solver->solve(problem, 1, gui_config.max_rectangle_in_subproblem,gui_config.T);
-        current_placements = result;
-        problem.set_current_solution(result);
-    }
-}
 
 void RectangleVisualizer::revertToOriginal() {
     if (!original_placements.empty()) {
@@ -389,8 +354,6 @@ void RectangleVisualizer::render() {
     ImGui::Separator();
 
     ImGui::BeginDisabled(is_solving);
-    if (ImGui::Button("Solve Next Step")) solveNextStep();
-    ImGui::SameLine();
     if (ImGui::Button("Run Solver")) {
         gui_config.T = 1000;
         runSolver();
