@@ -68,21 +68,15 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 500;
+    const int MAX_NEIGHBORS = 1000;
 
-    // Precompute occupancy and box usage
     std::unordered_map<int, std::vector<bool>> occupancy_grids;
     std::set<int> used_boxes;
-    std::unordered_map<int, int> box_usage;
-    int total_used_boxes = 0;
 
     for (const auto& rect : solution) {
         used_boxes.insert(rect.box_id);
-        box_usage[rect.box_id]++;
     }
-    total_used_boxes = used_boxes.size();
 
-    // Compute occupancy grids
     auto compute_occupancy_grid = [&](int box_id) {
         std::vector<bool> grid(L * L, false);
         for (const auto& rect : solution) {
@@ -105,256 +99,65 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         occupancy_grids[box_id] = compute_occupancy_grid(box_id);
     }
 
-    // Find boxes with few rectangles (potential candidates to empty)
-    std::vector<int> sparse_boxes;
-    for (const auto& [box_id, count] : box_usage) {
-        if (count <= 3 && count > 0) {
-            sparse_boxes.push_back(box_id);
-        }
-    }
-
-    // STRATEGY 1: For each sparse box, try to move its rectangles to other boxes
-    for (int sparse_box : sparse_boxes) {
-        if (nbs.size() >= MAX_NEIGHBORS) break;
-
-        std::vector<int> rects_in_sparse_box;
-        for (int i = 0; i < n; i++) {
-            if (solution[i].box_id == sparse_box) {
-                rects_in_sparse_box.push_back(i);
-            }
-        }
-
-        for (int rect_idx : rects_in_sparse_box) {
-            if (nbs.size() >= MAX_NEIGHBORS) break;
-
-            const auto& rect = solution[rect_idx];
-
-            for (int target_box : used_boxes) {
-                if (nbs.size() >= MAX_NEIGHBORS) break;
-                if (target_box == sparse_box) continue;
-
-                auto target_grid = occupancy_grids[target_box];
-
-                for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
-                    for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
-                        if (target_grid[y * L + x]) continue;
-
-                        for (int rot = 0; rot < 2; rot++) {
-                            if (rot == 1 && rect.width == rect.height) continue;
-
-                            int w = rot == 0 ? rect.width : rect.height;
-                            int h = rot == 0 ? rect.height : rect.width;
-
-                            if (x + w > L || y + h > L) {
-                                continue;
-                            }
-
-                            bool can_place = true;
-                            for (int dx = 0; dx < w && can_place; dx++) {
-                                for (int dy = 0; dy < h && can_place; dy++) {
-                                    if (target_grid[(y + dy) * L + (x + dx)]) {
-                                        can_place = false;
-                                    }
-                                }
-                            }
-
-                            if (can_place) {
-                                auto neighbor = solution;
-                                neighbor[rect_idx].box_id = target_box;
-                                neighbor[rect_idx].x = x;
-                                neighbor[rect_idx].y = y;
-                                neighbor[rect_idx].rotated = (rot == 1);
-                                nbs.push_back(neighbor);
-                                metadata.push_back(NeighborMetadata(rect_idx));
-                                break;
-                            }
-                        }
-                        if (nbs.size() < MAX_NEIGHBORS) break;
-                    }
-                    if (nbs.size() < MAX_NEIGHBORS) break;
-                }
-            }
-        }
-    }
-
-    // STRATEGY 2: Scan for empty spaces in all boxes
-    for (int target_box : used_boxes) {
-        if (nbs.size() >= MAX_NEIGHBORS) break;
-
-        auto grid = occupancy_grids[target_box];
-
-        for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
-            for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
-                if (!grid[y * L + x]) {
-                    for (int i = 0; i < n && nbs.size() < MAX_NEIGHBORS; i++) {
-                        if (solution[i].box_id == target_box) continue;
-
-                        const auto& rect = solution[i];
-                        for (int rot = 0; rot < 2; rot++) {
-                            if (rot == 1 && rect.width == rect.height) continue;
-
-                            int w = (rot == 0) ? rect.width : rect.height;
-                            int h = (rot == 0) ? rect.height : rect.width;
-
-                            if (x + w > L || y + h > L) {
-                                continue;
-                            }
-
-                            bool can_place = true;
-                            for (int dx = 0; dx < w && can_place; dx++) {
-                                for (int dy = 0; dy < h && can_place; dy++) {
-                                    int nx = x + dx;
-                                    int ny = y + dy;
-                                    if (nx >= L || ny >= L || grid[ny * L + nx]) {
-                                        can_place = false;
-                                    }
-                                }
-                            }
-
-                            if (can_place) {
-                                auto neighbor = solution;
-                                neighbor[i].box_id = target_box;
-                                neighbor[i].x = x;
-                                neighbor[i].y = y;
-                                neighbor[i].rotated = (rot == 1);
-                                nbs.push_back(neighbor);
-                                metadata.push_back(NeighborMetadata(i));
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    // STRATEGY 3: Move rectangles to most utilized box
-    int max_usage = 0;
-    int most_used_box = -1;
-    for (const auto& [box_id, count] : box_usage) {
-        if (count > max_usage) {
-            max_usage = count;
-            most_used_box = box_id;
-        }
-    }
-
-    if (most_used_box != -1) {
-        auto target_grid = occupancy_grids[most_used_box];
-
-        for (int i = 0; i < n && nbs.size() < MAX_NEIGHBORS; i++) {
-            if (solution[i].box_id == most_used_box) continue;
-
-            const auto& rect = solution[i];
-
-            for (int x = 0; x < L && nbs.size() < MAX_NEIGHBORS; x++) {
-                for (int y = 0; y < L && nbs.size() < MAX_NEIGHBORS; y++) {
-                    if (target_grid[y * L + x]) continue;
-
-                    for (int rot = 0; rot < 2; rot++) {
-                        if (rot == 1 && rect.width == rect.height) continue;
-
-                        int w = (rot == 0) ? rect.width : rect.height;
-                        int h = (rot == 0) ? rect.height : rect.width;
-
-                        if (x + w > L || y + h > L) {
-                            continue;
-                        }
-
-                        bool can_place = true;
-                        for (int dx = 0; dx < w && can_place; dx++) {
-                            for (int dy = 0; dy < h && can_place; dy++) {
-                                if (target_grid[(y + dy) * L + (x + dx)]) {
-                                    can_place = false;
-                                }
-                            }
-                        }
-
-                        if (can_place) {
-                            auto neighbor = solution;
-                            neighbor[i].box_id = most_used_box;
-                            neighbor[i].x = x;
-                            neighbor[i].y = y;
-                            neighbor[i].rotated = (rot == 1);
-                            nbs.push_back(neighbor);
-                            metadata.push_back(NeighborMetadata(i));
-                            break;
-                        }
-                    }
-                    if (nbs.size() < MAX_NEIGHBORS) break;
-                }
-                if (nbs.size() < MAX_NEIGHBORS) break;
-            }
-        }
-    }
-
-    // STRATEGY 4: Small position movements (1-2 units)
-    for (int rect_idx = 0; rect_idx < n && nbs.size() < MAX_NEIGHBORS; rect_idx++) {
+    auto can_place = [&](int rect_idx, int new_x, int new_y, bool new_rotated, int target_box) {
         const auto& rect = solution[rect_idx];
-        int orig_x = rect.x;
-        int orig_y = rect.y;
-        int w = rect.get_actual_width();
-        int h = rect.get_actual_height();
+        int w = new_rotated ? rect.height : rect.width;
+        int h = new_rotated ? rect.width : rect.height;
 
-        // Try moving 1 or 2 units in each direction
-        for (int direction = 0; direction < 4; direction++) {
-            // Try 1 unit movement
-            if (nbs.size() < MAX_NEIGHBORS) {
-                auto neighbor = solution;
-                int new_x = orig_x;
-                int new_y = orig_y;
+        if (new_x < 0 || new_y < 0 || new_x + w > L || new_y + h > L) {
+            return false;
+        }
 
-                if (direction == 0) new_x = orig_x - 1;
-                else if (direction == 1) new_x = orig_x + 1;
-                else if (direction == 2) new_y = orig_y - 1;
-                else if (direction == 3) new_y = orig_y + 1;
+        const auto& grid = occupancy_grids.at(target_box);
 
-                if (new_x >= 0 && new_x + w <= L &&
-                    new_y >= 0 && new_y + h <= L) {
-                    if (can_place_at_position(rect_idx, new_x, new_y, solution, occupancy_grids, L)) {
-                        neighbor[rect_idx].x = new_x;
-                        neighbor[rect_idx].y = new_y;
-                        nbs.push_back(neighbor);
-                        metadata.push_back(NeighborMetadata(rect_idx));
-                    }
-                }
-            }
+        for (int dy = 0; dy < h; dy++) {
+            for (int dx = 0; dx < w; dx++) {
+                int grid_x = new_x + dx;
+                int grid_y = new_y + dy;
 
-            // Try 2 units movement
-            if (nbs.size() < MAX_NEIGHBORS) {
-                auto neighbor = solution;
-                int new_x = orig_x;
-                int new_y = orig_y;
-
-                if (direction == 0) new_x = orig_x - 2;
-                else if (direction == 1) new_x = orig_x + 2;
-                else if (direction == 2) new_y = orig_y - 2;
-                else if (direction == 3) new_y = orig_y + 2;
-
-                if (new_x >= 0 && new_x + w <= L &&
-                    new_y >= 0 && new_y + h <= L) {
-                    if (can_place_at_position(rect_idx, new_x, new_y, solution, occupancy_grids, L)) {
-                        neighbor[rect_idx].x = new_x;
-                        neighbor[rect_idx].y = new_y;
-                        nbs.push_back(neighbor);
-                        metadata.push_back(NeighborMetadata(rect_idx));
+                if (grid[grid_y * L + grid_x]) {
+                    if (rect.box_id == target_box) {
+                        int orig_w = rect.get_actual_width();
+                        int orig_h = rect.get_actual_height();
+                        bool is_original_cell = (grid_x >= rect.x && grid_x < rect.x + orig_w &&
+                                                grid_y >= rect.y && grid_y < rect.y + orig_h);
+                        if (!is_original_cell) {
+                            return false;
+                        }
+                    } else {
+                        return false;
                     }
                 }
             }
         }
+        return true;
+    };
 
-        // Diagonal moves
-        int dx_vals[] = {-1, 1, -1, 1};
-        int dy_vals[] = {-1, -1, 1, 1};
+    for (int rect_idx = 0; rect_idx < n && nbs.size() < MAX_NEIGHBORS; rect_idx++) {
+        const auto& moving_rect = solution[rect_idx];
 
-        for (int d = 0; d < 4 && nbs.size() < MAX_NEIGHBORS; d++) {
-            int new_x = orig_x + dx_vals[d];
-            int new_y = orig_y + dy_vals[d];
-            
-            if (new_x >= 0 && new_x + w <= L &&
-                new_y >= 0 && new_y + h <= L) {
-                auto neighbor = solution;
-                if (can_place_at_position(rect_idx, new_x, new_y, solution, occupancy_grids, L)) {
+        for (int other_idx = 0; other_idx < n && nbs.size() < MAX_NEIGHBORS; other_idx++) {
+            if (rect_idx == other_idx) continue;
+
+            const auto& other_rect = solution[other_idx];
+            int target_box = other_rect.box_id;
+
+            int w = moving_rect.get_actual_width();
+            int h = moving_rect.get_actual_height();
+
+            std::vector<std::pair<int, int>> positions = {
+                {other_rect.x - w, other_rect.y},
+                {other_rect.x + other_rect.get_actual_width(), other_rect.y},
+                {other_rect.x, other_rect.y - h},
+                {other_rect.x, other_rect.y + other_rect.get_actual_height()}
+            };
+
+            for (const auto& [new_x, new_y] : positions) {
+                if (nbs.size() >= MAX_NEIGHBORS) break;
+
+                if (can_place(rect_idx, new_x, new_y, moving_rect.rotated, target_box)) {
+                    auto neighbor = solution;
+                    neighbor[rect_idx].box_id = target_box;
                     neighbor[rect_idx].x = new_x;
                     neighbor[rect_idx].y = new_y;
                     nbs.push_back(neighbor);
@@ -364,56 +167,76 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         }
     }
 
-    // STRATEGY 5: Move to adjacent empty spots
     for (int rect_idx = 0; rect_idx < n && nbs.size() < MAX_NEIGHBORS; rect_idx++) {
         const auto& rect = solution[rect_idx];
         int box_id = rect.box_id;
-        const auto& grid = occupancy_grids[box_id];
         int w = rect.get_actual_width();
         int h = rect.get_actual_height();
-        int orig_x = rect.x;
-        int orig_y = rect.y;
 
-        // Try positions around the rectangle
-        int positions[][2] = {
-            {orig_x - w, orig_y},      // LEFT
-            {orig_x + w, orig_y},      // RIGHT
-            {orig_x, orig_y - h},      // ABOVE
-            {orig_x, orig_y + h}       // BELOW
-        };
-
-        for (auto& pos : positions) {
+        for (int direction = 0; direction < 4; direction++) {
             if (nbs.size() >= MAX_NEIGHBORS) break;
-            
-            int new_x = pos[0];
-            int new_y = pos[1];
-            
-            if (new_x < 0 || new_y < 0 || new_x + w > L || new_y + h > L) continue;
 
-            bool can_place = true;
-            for (int dy = 0; dy < h && can_place; dy++) {
-                for (int dx = 0; dx < w && can_place; dx++) {
-                    int grid_x = new_x + dx;
-                    int grid_y = new_y + dy;
+            int max_shift = 0;
 
-                    bool is_original_cell = false;
-                    if (grid_x >= orig_x && grid_x < orig_x + w &&
-                        grid_y >= orig_y && grid_y < orig_y + h) {
-                        is_original_cell = true;
+            if (direction == 0) {
+                for (int shift = 1; shift <= rect.x; shift++) {
+                    if (!can_place(rect_idx, rect.x - shift, rect.y, rect.rotated, box_id)) {
+                        max_shift = shift - 1;
+                        break;
                     }
-
-                    if (!is_original_cell && grid[grid_y * L + grid_x]) {
-                        can_place = false;
-                    }
+                    max_shift = shift;
+                }
+                if (max_shift > 0) {
+                    auto neighbor = solution;
+                    neighbor[rect_idx].x = rect.x - max_shift;
+                    nbs.push_back(neighbor);
+                    metadata.push_back(NeighborMetadata(rect_idx));
                 }
             }
-
-            if (can_place) {
-                auto neighbor = solution;
-                neighbor[rect_idx].x = new_x;
-                neighbor[rect_idx].y = new_y;
-                nbs.push_back(neighbor);
-                metadata.push_back(NeighborMetadata(rect_idx));
+            else if (direction == 1) {
+                for (int shift = 1; shift <= L - (rect.x + w); shift++) {
+                    if (!can_place(rect_idx, rect.x + shift, rect.y, rect.rotated, box_id)) {
+                        max_shift = shift - 1;
+                        break;
+                    }
+                    max_shift = shift;
+                }
+                if (max_shift > 0) {
+                    auto neighbor = solution;
+                    neighbor[rect_idx].x = rect.x + max_shift;
+                    nbs.push_back(neighbor);
+                    metadata.push_back(NeighborMetadata(rect_idx));
+                }
+            }
+            else if (direction == 2) {
+                for (int shift = 1; shift <= rect.y; shift++) {
+                    if (!can_place(rect_idx, rect.x, rect.y - shift, rect.rotated, box_id)) {
+                        max_shift = shift - 1;
+                        break;
+                    }
+                    max_shift = shift;
+                }
+                if (max_shift > 0) {
+                    auto neighbor = solution;
+                    neighbor[rect_idx].y = rect.y - max_shift;
+                    nbs.push_back(neighbor);
+                    metadata.push_back(NeighborMetadata(rect_idx));
+                }
+            }
+            else if (direction == 3) {
+                for (int shift = 1; shift <= L - (rect.y + h); shift++) {
+                    if (!can_place(rect_idx, rect.x, rect.y + shift, rect.rotated, box_id)) {
+                        max_shift = shift - 1;
+                        break;
+                    }
+                    max_shift = shift;
+                }
+                if (max_shift > 0) {
+                    auto neighbor = solution;
+                    neighbor[rect_idx].y = rect.y + max_shift;
+                    nbs.push_back(neighbor);
+                    metadata.push_back(NeighborMetadata(rect_idx));
+                }
             }
         }
     }
