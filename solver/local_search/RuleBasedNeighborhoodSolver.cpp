@@ -140,69 +140,39 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     int L = problem.get_box_length();
 
     const int MAX_NEIGHBORS = 200;
-
     if (n == 0) return neighbors;
 
     std::vector<std::pair<int, int>> rect_dims(n);
     std::vector<int> rect_indices(n);
-    std::vector<int> original_box_ids(n);
 
-    std::set<int> used_box_ids;
     for (int i = 0; i < n; i++) {
         rect_dims[i] = {solution[i].width, solution[i].height};
         rect_indices[i] = i;
-        original_box_ids[i] = solution[i].box_id;
-        used_box_ids.insert(solution[i].box_id);
     }
 
-    int max_box_id = 0;
-    for (int box_id : used_box_ids) {
-        if (box_id > max_box_id) max_box_id = box_id;
-    }
-    int next_box_id = max_box_id + 1;
-
-    // Generate neighbors by swapping rectangle order
     for (int i = 0; i < n && neighbors.size() < MAX_NEIGHBORS; i++) {
         for (int j = i + 1; j < n && neighbors.size() < MAX_NEIGHBORS; j++) {
-
-            // Create neighbor by swapping order
             std::vector<int> reordered = rect_indices;
             std::swap(reordered[i], reordered[j]);
 
-            // Apply greedy placement
             auto new_solution = apply_greedy_placement_indexed(reordered, rect_dims, L);
-
             if (new_solution.size() != n) continue;
 
-            // Remap box IDs
-            std::map<int, int> relative_to_real_map;
-            std::set<int> assigned_real_ids;
+            // Create a unique timestamp for this neighbor solution
+            uint64_t base_id = UniqueIDGenerator::getUniqueID();
 
-            for (size_t k = 0; k < new_solution.size(); k++) {
-                int relative_box_id = new_solution[k].box_id;
-                int original_rect_idx = reordered[k];
-                int original_id = original_box_ids[original_rect_idx];
-
-                if (relative_to_real_map.find(relative_box_id) == relative_to_real_map.end()) {
-                    if (assigned_real_ids.find(original_id) == assigned_real_ids.end()) {
-                        relative_to_real_map[relative_box_id] = original_id;
-                        assigned_real_ids.insert(original_id);
-                    } else {
-                        relative_to_real_map[relative_box_id] = next_box_id++;
-                        assigned_real_ids.insert(relative_to_real_map[relative_box_id]);
-                    }
-                }
-
-                new_solution[k].box_id = relative_to_real_map[relative_box_id];
+            // Assign unique box IDs based on the timestamp
+            for (auto& rect : new_solution) {
+                // Use the original relative box ID (0, 1, 2...) but make it unique
+                // by combining with the timestamp
+                uint64_t unique_box_id = (base_id + rect.box_id) % 1000000000ULL;
+                rect.box_id = static_cast<int>(unique_box_id);
             }
 
             neighbors.push_back(new_solution);
-
-            // IMPORTANT: Rule-based solver generates entirely new solutions through
-            // permutation + greedy placement, so we CANNOT use delta calculation.
-            // Every neighbor is a complete re-arrangement.
-            metadata.push_back(NeighborMetadata()); // No delta support
+            metadata.push_back(NeighborMetadata());
         }
     }
+
     return neighbors;
 }
