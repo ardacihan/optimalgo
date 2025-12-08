@@ -16,6 +16,22 @@ public:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors_with_metadata(
         RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) override;
 
+    void generate_aggressive_moves(const std::vector<RectanglePlacement> &solution, int L,
+                                   std::vector<std::vector<RectanglePlacement>> &neighbors,
+                                   std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+
+    void generate_swap_focused_moves(RectangleFittingProblem &problem, const std::vector<RectanglePlacement> &solution,
+                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors,
+                                     std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+
+    void generate_conservative_moves(RectangleFittingProblem &problem, const std::vector<RectanglePlacement> &solution,
+                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors,
+                                     std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+
+    void generate_swap_moves(const std::vector<RectanglePlacement> &solution, int L,
+                             std::vector<std::vector<RectanglePlacement>> &neighbors,
+                             std::vector<NeighborMetadata> &metadata, int max_swaps);
+
 private:
     std::vector<RectanglePlacement> generate_swap_move(
         const std::vector<RectanglePlacement>& solution,

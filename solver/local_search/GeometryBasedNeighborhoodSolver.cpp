@@ -68,7 +68,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 1000;
+    const int MAX_NEIGHBORS = 400;
 
     std::unordered_map<int, std::vector<bool>> occupancy_grids;
     std::set<int> used_boxes;

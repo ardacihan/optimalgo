@@ -249,7 +249,7 @@ protected:
         double start_temperature = T * 2.0;
         double current_temperature = start_temperature;
         double min_temperature = 0.0;
-        double cooling_rate = 0.96;
+        double cooling_rate = 0.82;
 
         while (non_improving_count < max_non_improving) {
             iteration++;
