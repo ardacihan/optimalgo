@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.cpp (TRULY DIFFERENT)
+// FILE: solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.cpp (FIXED BOUNDS)
 // ============================================================================
 #include "RelaxedGeometryBasedNeighborhoodSolver.h"
 #include <random>
@@ -23,7 +23,7 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 800;
+    const int MAX_NEIGHBORS = 400;
 
     std::vector<std::vector<RectanglePlacement>> neighbors;
     neighbors.reserve(MAX_NEIGHBORS);
@@ -34,13 +34,13 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     std::cout << "[RelaxedSolver] T = " << T << " | ";
 
     // AGGRESSIVE TEMPERATURE-BASED BEHAVIOR:
-    // T >= 1000: Very aggressive - allow overlaps, random moves
+    // T >= 1000: Very aggressive - allow overlaps but NOT out-of-bounds
     // 400 <= T < 1000: Moderately aggressive - swap-focused
     // T < 400: Conservative - mostly geometry with some swaps
 
     if (T >= 1000) {
         std::cout << "VERY AGGRESSIVE mode (T >= 1000)" << std::endl;
-        // VERY AGGRESSIVE: Random moves, overlaps allowed
+        // VERY AGGRESSIVE: Random moves, overlaps allowed BUT bounds checked
         generate_aggressive_moves(solution, L, neighbors, metadata, MAX_NEIGHBORS, T);
     }
     else if (T >= 400) {
@@ -69,20 +69,50 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_aggressive_moves(
     int n = solution.size();
     static std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<int> idx_dist(0, n-1);
-    std::uniform_int_distribution<int> pos_dist(0, L-1);
     std::uniform_int_distribution<int> bool_dist(0, 1);
 
-    // 1. Random position moves (overlaps allowed!)
-    for (int i = 0; i < n && neighbors.size() < max_neighbors * 0.4; i++) {
+    // Helper function to check bounds (ALWAYS CHECKED)
+    auto check_bounds = [L](const RectanglePlacement& rect) -> bool {
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        return rect.x >= 0 && rect.y >= 0 &&
+               rect.x + w <= L && rect.y + h <= L;
+    };
+
+    // 1. Random position moves (overlaps allowed but bounds checked!)
+    int attempts = 0;
+    while (neighbors.size() < max_neighbors * 0.4 && attempts < n * 10) {
         auto neighbor = solution;
         int idx = idx_dist(rng);
 
-        neighbor[idx].x = pos_dist(rng);
-        neighbor[idx].y = pos_dist(rng);
+        // Generate random position within bounds
+        int w = neighbor[idx].get_actual_width();
+        int h = neighbor[idx].get_actual_height();
+
+        if (w > L || h > L) {
+            attempts++;
+            continue; // Rectangle too big for box
+        }
+
+        std::uniform_int_distribution<int> x_dist(0, L - w);
+        std::uniform_int_distribution<int> y_dist(0, L - h);
+
+        neighbor[idx].x = x_dist(rng);
+        neighbor[idx].y = y_dist(rng);
 
         // Random rotation (if not square)
         if (neighbor[idx].width != neighbor[idx].height && bool_dist(rng)) {
             neighbor[idx].rotated = !neighbor[idx].rotated;
+            // Recalculate position for new dimensions
+            w = neighbor[idx].get_actual_width();
+            h = neighbor[idx].get_actual_height();
+            if (w > L || h > L) {
+                neighbor[idx].rotated = !neighbor[idx].rotated; // Revert
+                w = neighbor[idx].get_actual_width();
+                h = neighbor[idx].get_actual_height();
+            }
+            if (neighbor[idx].x + w > L) neighbor[idx].x = L - w;
+            if (neighbor[idx].y + h > L) neighbor[idx].y = L - h;
         }
 
         // Random box change (30% chance)
@@ -91,12 +121,18 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_aggressive_moves(
             neighbor[idx].box_id = box_dist(rng);
         }
 
-        neighbors.push_back(neighbor);
-        metadata.push_back(NeighborMetadata(idx));
+        // Verify bounds
+        if (check_bounds(neighbor[idx])) {
+            neighbors.push_back(neighbor);
+            metadata.push_back(NeighborMetadata(idx));
+        }
+
+        attempts++;
     }
 
-    // 2. Random swaps (lots of them)
-    while (neighbors.size() < max_neighbors * 0.8 && n >= 2) {
+    // 2. Random swaps (bounds checked)
+    attempts = 0;
+    while (neighbors.size() < max_neighbors * 0.8 && attempts < n * 10 && n >= 2) {
         int i = idx_dist(rng);
         int j = idx_dist(rng);
         if (i == j) continue;
@@ -112,11 +148,16 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_aggressive_moves(
             std::swap(neighbor[i].rotated, neighbor[j].rotated);
         }
 
-        neighbors.push_back(neighbor);
-        metadata.push_back(NeighborMetadata());
+        // Verify bounds for both rectangles
+        if (check_bounds(neighbor[i]) && check_bounds(neighbor[j])) {
+            neighbors.push_back(neighbor);
+            metadata.push_back(NeighborMetadata());
+        }
+
+        attempts++;
     }
 
-    // 3. Cluster breaking: Move rectangles from crowded boxes to new boxes
+    // 3. Cluster breaking: Move rectangles from crowded boxes to new boxes (bounds checked)
     if (neighbors.size() < max_neighbors) {
         std::unordered_map<int, int> box_counts;
         for (const auto& rect : solution) {
@@ -140,8 +181,11 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_aggressive_moves(
                     neighbor[idx].x = 0;
                     neighbor[idx].y = 0;
 
-                    neighbors.push_back(neighbor);
-                    metadata.push_back(NeighborMetadata(idx));
+                    // Ensure fits in new position
+                    if (check_bounds(neighbor[idx])) {
+                        neighbors.push_back(neighbor);
+                        metadata.push_back(NeighborMetadata(idx));
+                    }
                     break;
                 }
             }
@@ -161,6 +205,14 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_swap_focused_moves(
     int n = solution.size();
     static std::mt19937 rng(std::random_device{}());
 
+    // Helper function to check bounds
+    auto check_bounds = [L](const RectanglePlacement& rect) -> bool {
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        return rect.x >= 0 && rect.y >= 0 &&
+               rect.x + w <= L && rect.y + h <= L;
+    };
+
     // 1. Start with SOME geometry moves (25%)
     std::vector<NeighborMetadata> geo_metadata;
     auto geo_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
@@ -177,11 +229,12 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_swap_focused_moves(
     }
     std::cout << "[RelaxedSolver]   Geometry moves: " << geo_to_take << std::endl;
 
-    // 2. Smart swaps based on rectangle characteristics
+    // 2. Smart swaps based on rectangle characteristics (bounds checked)
     std::uniform_int_distribution<int> dist(0, n-1);
 
     // Swap by size similarity
-    for (int s = 0; s < max_neighbors / 4 && neighbors.size() < max_neighbors * 0.5; s++) {
+    int swap_attempts = 0;
+    while (neighbors.size() < max_neighbors * 0.5 && swap_attempts < n * 5) {
         int i = dist(rng);
         int j = dist(rng);
         if (i == j) continue;
@@ -194,12 +247,17 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_swap_focused_moves(
         if (ratio > 0.7) { // Similar size
             auto neighbor = solution;
             std::swap(neighbor[i].box_id, neighbor[j].box_id);
-            neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata());
+
+            // Verify bounds (boxes should be same size L, so bounds still valid)
+            if (check_bounds(neighbor[i]) && check_bounds(neighbor[j])) {
+                neighbors.push_back(neighbor);
+                metadata.push_back(NeighborMetadata());
+            }
         }
+        swap_attempts++;
     }
 
-    // 3. Cross-box position exchanges
+    // 3. Cross-box position exchanges (bounds checked)
     for (int i = 0; i < n && neighbors.size() < max_neighbors * 0.75; i++) {
         for (int j = i + 1; j < n && neighbors.size() < max_neighbors * 0.75; j++) {
             if (solution[i].box_id == solution[j].box_id) continue;
@@ -208,10 +266,14 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_swap_focused_moves(
             const auto& r1 = solution[i];
             const auto& r2 = solution[j];
 
-            bool r1_fits_in_r2_box = (r1.x + r1.get_actual_width() <= L && r1.y + r1.get_actual_height() <= L);
-            bool r2_fits_in_r1_box = (r2.x + r2.get_actual_width() <= L && r2.y + r2.get_actual_height() <= L);
+            // Create test placements
+            RectanglePlacement test1 = r1;
+            test1.box_id = r2.box_id;
 
-            if (r1_fits_in_r2_box && r2_fits_in_r1_box) {
+            RectanglePlacement test2 = r2;
+            test2.box_id = r1.box_id;
+
+            if (check_bounds(test1) && check_bounds(test2)) {
                 auto neighbor = solution;
                 neighbor[i].box_id = r2.box_id;
                 neighbor[j].box_id = r1.box_id;
@@ -223,16 +285,15 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_swap_focused_moves(
         }
     }
 
-    // 4. Rotation swaps for non-squares
+    // 4. Rotation swaps for non-squares (bounds checked)
     for (int i = 0; i < n && neighbors.size() < max_neighbors; i++) {
         if (solution[i].width == solution[i].height) continue;
 
         auto neighbor = solution;
         neighbor[i].rotated = !solution[i].rotated;
 
-        // Check if still fits
-        if (neighbor[i].x + neighbor[i].get_actual_width() <= L &&
-            neighbor[i].y + neighbor[i].get_actual_height() <= L) {
+        // Check if still fits within bounds
+        if (check_bounds(neighbor[i])) {
             neighbors.push_back(neighbor);
             metadata.push_back(NeighborMetadata(i));
         }
@@ -250,7 +311,15 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_conservative_moves(
 
     int n = solution.size();
 
-    // 1. Mostly geometry moves (70%)
+    // Helper function to check bounds
+    auto check_bounds = [L](const RectanglePlacement& rect) -> bool {
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        return rect.x >= 0 && rect.y >= 0 &&
+               rect.x + w <= L && rect.y + h <= L;
+    };
+
+    // 1. Mostly geometry moves (70%) - already bounds-checked
     std::vector<NeighborMetadata> geo_metadata;
     auto geo_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         problem, T, geo_metadata);
@@ -266,7 +335,7 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_conservative_moves(
     }
     std::cout << "[RelaxedSolver]   Geometry moves: " << geo_to_take << std::endl;
 
-    // 2. Fix overlapping rectangles
+    // 2. Fix overlapping rectangles (bounds checked)
     if (neighbors.size() < max_neighbors * 0.9) {
         std::vector<int> overlapping;
 
@@ -297,12 +366,15 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_conservative_moves(
             neighbor[idx].x = 0;
             neighbor[idx].y = 0;
 
-            neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(idx));
+            // Ensure fits in new position
+            if (check_bounds(neighbor[idx])) {
+                neighbors.push_back(neighbor);
+                metadata.push_back(NeighborMetadata(idx));
+            }
         }
     }
 
-    // 3. Strategic swaps only
+    // 3. Strategic swaps only (bounds checked)
     if (neighbors.size() < max_neighbors) {
         // Swap rectangles that are isolated (not touching others)
         std::vector<int> isolated_indices;
@@ -333,8 +405,11 @@ void RelaxedGeometryBasedNeighborhoodSolver::generate_conservative_moves(
             auto neighbor = solution;
             std::swap(neighbor[idx1].box_id, neighbor[idx2].box_id);
 
-            neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata());
+            // Verify bounds
+            if (check_bounds(neighbor[idx1]) && check_bounds(neighbor[idx2])) {
+                neighbors.push_back(neighbor);
+                metadata.push_back(NeighborMetadata());
+            }
         }
     }
 }

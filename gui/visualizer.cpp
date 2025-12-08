@@ -318,13 +318,13 @@ void RectangleVisualizer::render() {
 
     ImGui::Text("Instance Generator Parameters");
     ImGui::Separator();
-    ImGui::SliderInt("Rectangle Count",&gui_config.rect_count,1,1000);
-    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,20);
+    ImGui::SliderInt("Rectangle Count",&gui_config.rect_count,10,1000);
+    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,80);
     if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
-    ImGui::SliderInt("Min Width",&gui_config.min_width,3,box_length);
-    ImGui::SliderInt("Max Width",&gui_config.max_width,std::min(gui_config.min_width+4,box_length),box_length);
-    ImGui::SliderInt("Min Height",&gui_config.min_height,3,box_length);
-    ImGui::SliderInt("Max Height",&gui_config.max_height,std::min(gui_config.min_height+4,box_length),box_length);
+    ImGui::SliderInt("Min Width",&gui_config.min_width,5,box_length);
+    ImGui::SliderInt("Max Width",&gui_config.max_width,std::min(20,box_length),box_length);
+    ImGui::SliderInt("Min Height",&gui_config.min_height,5,box_length);
+    ImGui::SliderInt("Max Height",&gui_config.max_height,std::min(10,box_length),box_length);
     if (ImGui::Button("Generate new problem")) generateRandomProblem();
     ImGui::Separator();
     ImGui::Text("Box Viewing:");

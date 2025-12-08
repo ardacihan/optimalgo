@@ -22,10 +22,10 @@
 
 struct GUIConfig {
     int rect_count = 1000;
-    int box_size = 100;
-    int min_width = 3;
-    int max_width = 30;
-    int min_height = 3;
+    int box_size = 80;
+    int min_width = 5;
+    int max_width = 20;
+    int min_height = 5;
     int max_height = 20;
     bool view_all_boxes = true;
     int current_box_view = 0;
