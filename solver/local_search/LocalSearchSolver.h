@@ -38,7 +38,6 @@ public:
           int max_rectangle_in_subproblem,
           int T) override
     {
-        std::cout << "Called this solve" << std::endl;
         auto current_solution = problem.get_current_solution();
         auto obj = problem.objective(current_solution);
         auto obj_new = obj + 10;
@@ -58,17 +57,16 @@ solve(RectangleFittingProblem &problem,
       int T,
       double lock_threshold)
 {
-
-    std::cout << "Called this solve 2" << std::endl;
-
     auto current_solution = problem.get_current_solution();
     if (current_solution.empty()) return current_solution;
 
     int current_obj = problem.objective(current_solution, T);
 
+    bool improved = true;
     int rerun_count = 0;
     int max_reruns = std::max(1, num_reruns);
 
+    // ✅ Adaptive parameters
     int current_max_subproblem = max_rectangle_in_subproblem;
     int max_global_limit = (int)current_solution.size();   // hard ceiling
     int growth_step = 5;                                   // how fast it grows
@@ -98,11 +96,17 @@ solve(RectangleFittingProblem &problem,
         current_obj = problem.objective(current_solution, T);
 
         if (current_obj > previous_obj) {
+            improved = true;
+
+            // ✅ Optional: tighten again after success
             current_max_subproblem =
                 std::max(max_rectangle_in_subproblem,
                          current_max_subproblem - growth_step);
         }
         else {
+            improved = false;
+
+            // ✅ CORE FEATURE: expand subproblem size
             current_max_subproblem = std::min(
                 current_max_subproblem + growth_step,
                 max_global_limit
@@ -354,6 +358,8 @@ protected:
         double current_temperature = start_temperature;
         double min_temperature = 0.0;
         double cooling_rate = 0.96;
+
+        std::uniform_real_distribution<> dist(0.0, 1.0);
 
         while (non_improving_count < max_non_improving) {
             iteration++;
