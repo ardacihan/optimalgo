@@ -31,7 +31,7 @@ struct GUIConfig {
     int current_box_view = 0;
     bool show_solver_steps = false;
     int num_reruns = 2;
-    int max_rectangle_in_subproblem = 100;
+    int max_rectangle_in_subproblem = 50;
     int T = 2000;
 
     // Solver type selection

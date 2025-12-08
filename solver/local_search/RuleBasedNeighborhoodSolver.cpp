@@ -204,8 +204,5 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             metadata.push_back(NeighborMetadata()); // No delta support
         }
     }
-
-    std::cout << "Generated " << neighbors.size() << " rule-based neighbors (no delta support)" << std::endl;
-
     return neighbors;
 }

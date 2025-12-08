@@ -133,19 +133,13 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     const int MAX_NEIGHBORS = 300;
 
-    std::cout << "\n=== RELAXED GEOMETRY SOLVER (T=" << T << ") ===" << std::endl;
 
     long long initial_overlap = calculate_total_overlap(solution);
-    std::cout << "Initial overlap: " << initial_overlap << std::endl;
 
     // Normalize temperature to [0, 1]
     double temp_ratio = std::clamp(T / 1000.0, 0.0, 1.0);
     double exploration_factor = temp_ratio;
     double exploitation_factor = 1.0 - temp_ratio;
-
-    std::cout << "Temperature ratio: " << temp_ratio
-              << " (exploration: " << exploration_factor
-              << ", exploitation: " << exploitation_factor << ")" << std::endl;
 
     // PHASE 1: GEOMETRY-BASED MOVES (use parent class's method WITH METADATA)
     std::vector<NeighborMetadata> geometry_metadata;
@@ -166,10 +160,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             metadata.push_back(NeighborMetadata());
         }
     }
-
-    std::cout << "Added " << nbs.size() << " geometry-based moves (ratio: "
-              << geometry_ratio << ")" << std::endl;
-
     // PHASE 2: CONSOLIDATION MOVES
     int consolidation_moves = 0;
     int num_consolidations = (int)(5 + 25 * exploitation_factor);
@@ -252,7 +242,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         }
     }
 
-    std::cout << "Added " << consolidation_moves << " consolidation moves" << std::endl;
 
     // PHASE 3: EXPLORATION MOVES (multi-rectangle, no delta)
     int exploration_moves = 0;
@@ -277,9 +266,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         metadata.push_back(NeighborMetadata()); // No delta for multi-rect changes
         exploration_moves++;
     }
-
-    std::cout << "Added " << exploration_moves << " exploration moves "
-              << "(spreads: " << num_spreads << ", swaps: " << num_swaps << ")" << std::endl;
 
     // PHASE 4: OVERLAP RESOLUTION
     if (initial_overlap > 0) {
@@ -333,8 +319,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
                 resolution_moves++;
             }
         }
-
-        std::cout << "Added " << resolution_moves << " new-box moves" << std::endl;
 
         // Resolve overlaps within boxes
         for (const auto& [box_id, rect_indices] : box_rects) {
@@ -408,7 +392,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             }
         }
 
-        std::cout << "Added overlap resolution moves (total)" << std::endl;
     }
 
     // PHASE 5: SMALL PERTURBATIONS (single-rect moves, can use delta)
@@ -453,9 +436,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             }
         }
     }
-
-    std::cout << "Added " << perturbation_moves << " perturbation moves" << std::endl;
-    std::cout << "Total neighbors generated: " << nbs.size() << std::endl;
 
     return nbs;
 }

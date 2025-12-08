@@ -68,7 +68,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 300;
+    const int MAX_NEIGHBORS = 500;
 
     // Precompute occupancy and box usage
     std::unordered_map<int, std::vector<bool>> occupancy_grids;
@@ -417,10 +417,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             }
         }
     }
-
-    std::cout << "Generated " << nbs.size() << " neighbors ("
-              << total_used_boxes << " boxes, "
-              << "with delta calculation support)\n";
 
     return nbs;
 }

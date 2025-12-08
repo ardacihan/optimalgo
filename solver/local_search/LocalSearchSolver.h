@@ -61,16 +61,13 @@ public:
         if (current_solution.empty()) return current_solution;
 
         int current_obj = problem.objective(current_solution, T);
-        std::cout << "\n=== STARTING ITERATIVE RERUN PROCESS ===" << std::endl;
-        std::cout << "Total rectangles: " << current_solution.size() << std::endl;
-        std::cout << "Initial objective: " << current_obj << std::endl;
+
 
         bool improved = true;
         int rerun_count = 0;
         int max_reruns = std::max(1, num_reruns);
 
         while (rerun_count < max_reruns) {
-            std::cout << "\n=== RERUN " << rerun_count << " ===" << std::endl;
 
             auto previous_solution = current_solution;
             int previous_obj = current_obj;
@@ -79,7 +76,6 @@ public:
                 current_solution, problem.get_box_length(), lock_threshold);
 
             if (active.empty()) {
-                std::cout << "No active rectangles remaining - stopping reruns" << std::endl;
                 break;
             }
 
@@ -91,23 +87,15 @@ public:
             problem.set_current_solution(current_solution);
 
             current_obj = problem.objective(current_solution, T);
-            std::cout << "Objective after rerun " << rerun_count << ": " << current_obj
-                      << " (previous: " << previous_obj << ")" << std::endl;
 
             if (current_obj > previous_obj) {
-                std::cout << "✓ Improved by " << (current_obj - previous_obj) << std::endl;
                 improved = true;
             } else {
-                std::cout << "✗ No improvement - stopping reruns" << std::endl;
                 improved = false;
             }
 
             rerun_count++;
         }
-
-        std::cout << "\n=== RERUN PROCESS COMPLETE ===" << std::endl;
-        std::cout << "Total reruns performed: " << rerun_count << std::endl;
-        std::cout << "Final objective: " << current_obj << std::endl;
 
         return current_solution;
     }
@@ -189,17 +177,12 @@ protected:
             box_rect_count[r.box_id]++;
         }
 
-        std::cout << "\nBox utilization analysis:" << std::endl;
         std::set<int> locked_box_ids;
         std::set<int> active_box_ids;
 
         for (const auto& [box_id, area] : box_area) {
             double util = (double)area / box_capacity;
             bool is_locked = (util >= lock_threshold);
-
-            std::cout << "  Box " << box_id << ": " << box_rect_count[box_id]
-                      << " rectangles, " << (util * 100.0) << "% utilization"
-                      << (is_locked ? " [LOCKED]" : " [ACTIVE]") << std::endl;
 
             if (is_locked) {
                 locked_box_ids.insert(box_id);
@@ -219,12 +202,6 @@ protected:
                 active.push_back(r);
             }
         }
-
-        std::cout << "\nFiltering results:" << std::endl;
-        std::cout << "  Locked: " << locked.size() << " rectangles in "
-                  << locked_box_ids.size() << " boxes" << std::endl;
-        std::cout << "  Active: " << active.size() << " rectangles in "
-                  << active_box_ids.size() << " boxes" << std::endl;
 
         return {locked, active};
     }
@@ -307,14 +284,12 @@ protected:
     merge_solutions(const std::vector<RectanglePlacement>& locked,
                    std::vector<RectanglePlacement> active)
     {
-        std::cout << "\nMerging solutions..." << std::endl;
 
         int max_locked_box_id = -1;
         for (const auto& r : locked) {
             max_locked_box_id = std::max(max_locked_box_id, r.box_id);
         }
 
-        std::cout << "  Max locked box ID: " << max_locked_box_id << std::endl;
 
         std::unordered_map<int, int> box_id_mapping;
         int next_box_id = max_locked_box_id + 1;
@@ -338,8 +313,6 @@ protected:
             final_boxes.insert(r.box_id);
         }
 
-        std::cout << "  Final solution: " << merged.size() << " rectangles in "
-                  << final_boxes.size() << " boxes" << std::endl;
 
         return merged;
     }
@@ -360,7 +333,6 @@ protected:
         int non_improving_count = 0;
         int iteration = 0;
 
-        std::cout << "    Starting local search (initial obj: " << current_obj << ")" << std::endl;
 
         double start_temperature = T * 2.0;
         double current_temperature = start_temperature;
@@ -381,7 +353,6 @@ protected:
             auto neighbors = construct_neighbors_with_metadata(problem, int_temperature, metadata);
 
             if (neighbors.empty()) {
-                std::cout << "    No neighbors at iteration " << iteration << std::endl;
                 break;
             }
 
@@ -418,8 +389,6 @@ protected:
                     best_sol = current_solution;
                     best_obj = current_obj;
                     non_improving_count = 0;
-                    std::cout << "    Iteration " << iteration << " (T=" << int_temperature
-                              << "): new best = " << best_obj << std::endl;
                 } else {
                     non_improving_count++;
                 }
@@ -429,13 +398,6 @@ protected:
                 non_improving_count++;
             }
         }
-
-        int improvement = best_obj - problem.objective(initial, T);
-        std::cout << "    Local search finished after " << iteration
-                  << " iterations (best: " << best_obj
-                  << ", improvement: " << improvement
-                  << ", final T: " << (int)current_temperature << ")" << std::endl;
-
         return best_sol;
     }
 };
