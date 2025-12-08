@@ -1,3 +1,6 @@
+// ============================================================================
+// FILE: solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.cpp (UPDATED WITH DELTA)
+// ============================================================================
 #include "RelaxedGeometryBasedNeighborhoodSolver.h"
 #include <cmath>
 #include <random>
@@ -8,10 +11,10 @@
 std::vector<std::vector<RectanglePlacement>>
 RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors(
     RectangleFittingProblem &problem, int T) {
-    return construct_overlapping_neighbors(problem, T);
+    std::vector<NeighborMetadata> dummy_metadata;
+    return construct_neighbors_with_metadata(problem, T, dummy_metadata);
 }
 
-// Helper: Calculate total overlap area in a solution
 long long RelaxedGeometryBasedNeighborhoodSolver::calculate_total_overlap(
     const std::vector<RectanglePlacement>& solution) {
 
@@ -41,7 +44,6 @@ long long RelaxedGeometryBasedNeighborhoodSolver::calculate_total_overlap(
     return total_overlap;
 }
 
-// Helper: Generate random spread (used at high temperatures)
 std::vector<RectanglePlacement>
 RelaxedGeometryBasedNeighborhoodSolver::generate_random_spread(
     const std::vector<RectanglePlacement>& solution,
@@ -71,7 +73,6 @@ RelaxedGeometryBasedNeighborhoodSolver::generate_random_spread(
     return spread_solution;
 }
 
-// Helper: Generate swap move between boxes
 std::vector<RectanglePlacement>
 RelaxedGeometryBasedNeighborhoodSolver::generate_swap_move(
     const std::vector<RectanglePlacement>& solution,
@@ -121,8 +122,8 @@ RelaxedGeometryBasedNeighborhoodSolver::generate_swap_move(
 }
 
 std::vector<std::vector<RectanglePlacement>>
-RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
-    RectangleFittingProblem &problem, int T) {
+RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
+    RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) {
 
     std::vector<std::vector<RectanglePlacement>> nbs;
     auto solution = problem.get_current_solution();
@@ -130,32 +131,28 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
     int n = solution.size();
     if (n == 0) return nbs;
 
-    const int MAX_NEIGHBORS = 2000;
+    const int MAX_NEIGHBORS = 300;
 
     std::cout << "\n=== RELAXED GEOMETRY SOLVER (T=" << T << ") ===" << std::endl;
 
     long long initial_overlap = calculate_total_overlap(solution);
     std::cout << "Initial overlap: " << initial_overlap << std::endl;
 
-    // ======================================
-    // KEY IMPROVEMENT: Normalize temperature to [0, 1]
-    // ======================================
-    double temp_ratio = std::clamp(T / 1000.0, 0.0, 1.0);  // 0.0 at T=0, 1.0 at T=1000
-    double exploration_factor = temp_ratio;                 // High T = more exploration
-    double exploitation_factor = 1.0 - temp_ratio;          // Low T = more exploitation
+    // Normalize temperature to [0, 1]
+    double temp_ratio = std::clamp(T / 1000.0, 0.0, 1.0);
+    double exploration_factor = temp_ratio;
+    double exploitation_factor = 1.0 - temp_ratio;
 
     std::cout << "Temperature ratio: " << temp_ratio
               << " (exploration: " << exploration_factor
               << ", exploitation: " << exploitation_factor << ")" << std::endl;
 
-    // ======================================
-    // PHASE 1: GEOMETRY-BASED MOVES (foundation - always present)
-    // ======================================
-    auto geometry_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors(problem, T);
+    // PHASE 1: GEOMETRY-BASED MOVES (use parent class's method WITH METADATA)
+    std::vector<NeighborMetadata> geometry_metadata;
+    auto geometry_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
+        problem, T, geometry_metadata);
 
-    // At low T: use MORE geometry moves (50%-80%)
-    // At high T: use FEWER geometry moves (30%-50%) to leave room for exploration
-    double geometry_ratio = 0.3 + 0.5 * exploitation_factor;  // 30% to 80%
+    double geometry_ratio = 0.3 + 0.5 * exploitation_factor;
     int num_geometry_moves = std::min(
         (int)geometry_neighbors.size(),
         (int)(MAX_NEIGHBORS * geometry_ratio)
@@ -163,22 +160,21 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
 
     for (int i = 0; i < num_geometry_moves && nbs.size() < MAX_NEIGHBORS; i++) {
         nbs.push_back(geometry_neighbors[i]);
+        if (i < geometry_metadata.size()) {
+            metadata.push_back(geometry_metadata[i]);
+        } else {
+            metadata.push_back(NeighborMetadata());
+        }
     }
 
     std::cout << "Added " << nbs.size() << " geometry-based moves (ratio: "
               << geometry_ratio << ")" << std::endl;
 
-    // ======================================
-    // PHASE 2: CONSOLIDATION MOVES (smart geometric move - works at ALL temperatures)
-    // ======================================
+    // PHASE 2: CONSOLIDATION MOVES
     int consolidation_moves = 0;
-
-    // At LOW temperature: prioritize consolidation (10-30 moves)
-    // At HIGH temperature: still do some consolidation (5-10 moves)
     int num_consolidations = (int)(5 + 25 * exploitation_factor);
     num_consolidations = std::min(num_consolidations, MAX_NEIGHBORS - (int)nbs.size());
 
-    // Calculate box occupancies
     std::unordered_map<int, std::vector<int>> box_rects;
     std::unordered_map<int, long long> box_used_area;
 
@@ -190,7 +186,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
 
     long long box_capacity = (long long)L * L;
 
-    // Sort boxes by occupancy (sparse to dense)
     std::vector<std::pair<double, int>> box_occupancies;
     for (const auto& [box_id, area] : box_used_area) {
         double occ = (double)area / box_capacity;
@@ -198,10 +193,9 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
     }
     std::sort(box_occupancies.begin(), box_occupancies.end());
 
-    // Try moving rectangles from sparse boxes to denser boxes
     for (const auto& [occupancy, sparse_box_id] : box_occupancies) {
         if (consolidation_moves >= num_consolidations) break;
-        if (occupancy > 0.7) break;  // Only from sparse boxes
+        if (occupancy > 0.7) break;
 
         const auto& sparse_rects = box_rects[sparse_box_id];
 
@@ -211,26 +205,22 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
             const auto& rect = solution[rect_idx];
             long long rect_area = (long long)rect.width * rect.height;
 
-            // Try moving to denser boxes
             for (const auto& [target_occ, target_box_id] : box_occupancies) {
                 if (target_box_id == sparse_box_id) continue;
 
                 long long target_area = box_used_area[target_box_id];
-                if (target_area + rect_area > box_capacity * 0.95) continue;  // Too full
+                if (target_area + rect_area > box_capacity * 0.95) continue;
 
-                // Generate neighbor: move rectangle to target box
                 auto neighbor = solution;
                 neighbor[rect_idx].box_id = target_box_id;
 
-                // Try different placement positions
                 std::vector<std::pair<int, int>> positions = {
-                    {0, 0},  // Bottom-left corner
-                    {L - rect.get_actual_width(), 0},  // Bottom-right
-                    {0, L - rect.get_actual_height()},  // Top-left
-                    {L - rect.get_actual_width(), L - rect.get_actual_height()},  // Top-right
+                    {0, 0},
+                    {L - rect.get_actual_width(), 0},
+                    {0, L - rect.get_actual_height()},
+                    {L - rect.get_actual_width(), L - rect.get_actual_height()},
                 };
 
-                // At low T, also try positions near existing rectangles in target box
                 if (exploitation_factor > 0.5) {
                     for (int other_idx : box_rects[target_box_id]) {
                         const auto& other = solution[other_idx];
@@ -250,54 +240,53 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
                         long long new_overlap = calculate_total_overlap(neighbor);
                         if (new_overlap <= initial_overlap) {
                             nbs.push_back(neighbor);
+                            metadata.push_back(NeighborMetadata(rect_idx));
                             consolidation_moves++;
                             break;
                         }
                     }
                 }
 
-                if (consolidation_moves % 5 == 0) break;  // Don't try too many targets per rect
+                if (consolidation_moves % 5 == 0) break;
             }
         }
     }
 
     std::cout << "Added " << consolidation_moves << " consolidation moves" << std::endl;
 
-    // ======================================
-    // PHASE 3: EXPLORATION MOVES (temperature-scaled, not thresholded)
-    // ======================================
+    // PHASE 3: EXPLORATION MOVES (multi-rectangle, no delta)
     int exploration_moves = 0;
 
-    // A. Random spread moves - probability based on temperature
-    double spread_probability = exploration_factor * exploration_factor;  // Quadratic falloff
+    // Random spread moves
+    double spread_probability = exploration_factor * exploration_factor;
     int num_spreads = (int)(5 * spread_probability);
     num_spreads = std::min(num_spreads, MAX_NEIGHBORS - (int)nbs.size());
 
     for (int i = 0; i < num_spreads; i++) {
         nbs.push_back(generate_random_spread(solution, L, T));
+        metadata.push_back(NeighborMetadata()); // No delta for multi-rect changes
         exploration_moves++;
     }
 
-    // B. Swap moves - linear probability
+    // Swap moves
     int num_swaps = (int)(10 * exploration_factor);
     num_swaps = std::min(num_swaps, MAX_NEIGHBORS - (int)nbs.size());
 
     for (int i = 0; i < num_swaps; i++) {
         nbs.push_back(generate_swap_move(solution, L, T));
+        metadata.push_back(NeighborMetadata()); // No delta for multi-rect changes
         exploration_moves++;
     }
 
     std::cout << "Added " << exploration_moves << " exploration moves "
               << "(spreads: " << num_spreads << ", swaps: " << num_swaps << ")" << std::endl;
 
-    // ======================================
-    // PHASE 4: OVERLAP RESOLUTION (if overlaps exist)
-    // ======================================
+    // PHASE 4: OVERLAP RESOLUTION
     if (initial_overlap > 0) {
         int resolution_moves = 0;
         int max_resolution = std::min(50, MAX_NEIGHBORS - (int)nbs.size());
 
-        // NEW: First try creating a new box for heavily overlapping rectangles
+        // Create new boxes for heavily overlapping rectangles
         std::vector<std::pair<long long, int>> rect_overlap_score;
         for (int i = 0; i < n; i++) {
             long long overlap = 0;
@@ -321,36 +310,33 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
             }
         }
 
-        // Sort by overlap amount (most overlapped first)
         std::sort(rect_overlap_score.rbegin(), rect_overlap_score.rend());
 
-        // Try moving most overlapped rectangles to new boxes
         int max_new_boxes = std::min(5, MAX_NEIGHBORS - (int)nbs.size());
         for (int i = 0; i < std::min(max_new_boxes, (int)rect_overlap_score.size()); i++) {
             int rect_idx = rect_overlap_score[i].second;
 
-            // Find highest box ID
             int max_box_id = 0;
             for (const auto& r : solution) {
                 max_box_id = std::max(max_box_id, r.box_id);
             }
 
-            // Create neighbor with rectangle in new box
             auto neighbor = solution;
             neighbor[rect_idx].box_id = max_box_id + 1;
-            neighbor[rect_idx].x = 0;  // Place at origin
+            neighbor[rect_idx].x = 0;
             neighbor[rect_idx].y = 0;
 
             long long new_overlap = calculate_total_overlap(neighbor);
             if (new_overlap < initial_overlap) {
                 nbs.push_back(neighbor);
+                metadata.push_back(NeighborMetadata(rect_idx));
                 resolution_moves++;
             }
         }
 
-        std::cout << "Added " << resolution_moves << " new-box moves for overlapped rectangles" << std::endl;
+        std::cout << "Added " << resolution_moves << " new-box moves" << std::endl;
 
-        // Then try resolving overlaps within boxes
+        // Resolve overlaps within boxes
         for (const auto& [box_id, rect_indices] : box_rects) {
             if (resolution_moves >= max_resolution) break;
 
@@ -398,6 +384,7 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
                     long long new_overlap = calculate_total_overlap(neighbor);
                     if (new_overlap < initial_overlap) {
                         nbs.push_back(neighbor);
+                        metadata.push_back(NeighborMetadata(idx1));
                         resolution_moves++;
                         break;
                     }
@@ -412,6 +399,7 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
                         new_overlap = calculate_total_overlap(neighbor);
                         if (new_overlap < initial_overlap) {
                             nbs.push_back(neighbor);
+                            metadata.push_back(NeighborMetadata(idx1));
                             resolution_moves++;
                             break;
                         }
@@ -420,13 +408,10 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
             }
         }
 
-        std::cout << "Added " << (resolution_moves) << " total overlap resolution moves" << std::endl;
+        std::cout << "Added overlap resolution moves (total)" << std::endl;
     }
 
-    // ======================================
-    // PHASE 5: SMALL PERTURBATIONS (always useful, temperature-scaled)
-    // ======================================
-    // Sort rectangles by box occupancy (least occupied boxes first)
+    // PHASE 5: SMALL PERTURBATIONS (single-rect moves, can use delta)
     std::unordered_map<int, int> box_rect_count;
     for (const auto& r : solution) {
         box_rect_count[r.box_id]++;
@@ -440,8 +425,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
     });
 
     int perturbation_moves = 0;
-
-    // Temperature-scaled perturbations: more at high T, fewer at low T
     int max_perturbations = (int)(10 + 15 * exploration_factor);
     max_perturbations = std::min(max_perturbations, MAX_NEIGHBORS - (int)nbs.size());
 
@@ -450,7 +433,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
         int rect_idx = rect_indices[i];
         auto& rect = neighbor[rect_idx];
 
-        // Step size scales with temperature (smaller at low T)
         int max_step = std::max(1, (int)(1 + 5 * exploration_factor));
         int dx = (rand() % (2 * max_step + 1)) - max_step;
         int dy = (rand() % (2 * max_step + 1)) - max_step;
@@ -462,11 +444,11 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_overlapping_neighbors(
             rect.x = new_x;
             rect.y = new_y;
 
-            // At low T: only accept improvements; at high T: allow worse moves
-            double tolerance = 1.0 + 0.2 * exploration_factor;  // 1.0 to 1.2
+            double tolerance = 1.0 + 0.2 * exploration_factor;
             long long new_overlap = calculate_total_overlap(neighbor);
             if (new_overlap <= initial_overlap * tolerance) {
                 nbs.push_back(neighbor);
+                metadata.push_back(NeighborMetadata(rect_idx)); // Can use delta!
                 perturbation_moves++;
             }
         }
