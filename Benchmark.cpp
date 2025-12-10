@@ -457,7 +457,7 @@ private:
     }
 };
 
-int main(int argc, char* argv[]) {
+int main2(int argc, char* argv[]) {
     bool quick_mode = true;
 
     std::cout << "\n========================================" << std::endl;

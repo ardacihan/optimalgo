@@ -32,7 +32,7 @@ struct GUIConfig {
     bool show_solver_steps = false;
     int num_reruns = 3;
     int max_rectangle_in_subproblem = 100;
-    int T = 2000;
+    int T = 1000;
 
     // Solver type selection
     int solver_type = 0; // 0 = Local Search, 1 = Greedy
@@ -74,6 +74,8 @@ private:
     void updateMaxSizeLimits();
     void saveOriginalState();
     void reset_relaxed_temperature();
+
+    void updateT();
 
 public:
     RectangleVisualizer(int width, int height);

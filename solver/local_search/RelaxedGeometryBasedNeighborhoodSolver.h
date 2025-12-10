@@ -10,6 +10,8 @@
 
 class RelaxedGeometryBasedNeighborhoodSolver : public GeometryBasedNeighborhoodSolver {
 public:
+    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T);
+
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem, int T) override;
     

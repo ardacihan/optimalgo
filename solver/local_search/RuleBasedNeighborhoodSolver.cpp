@@ -233,3 +233,42 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     metadata.resize(neighbors.size());
     return neighbors;
 }
+
+std::vector<RectanglePlacement> RuleBasedNeighborhoodSolver::solve_one_step(
+    RectangleFittingProblem &problem, int T) {
+
+    // Get neighbors using rule-based swaps
+    std::vector<NeighborMetadata> metadata;
+    auto neighbors = construct_neighbors_with_metadata(problem, T, metadata);
+
+    // Early return if no neighbors generated
+    if (neighbors.empty()) {
+        return problem.get_current_solution();
+    }
+
+    // Evaluate current solution
+    auto current_solution = problem.get_current_solution();
+    int current_obj = problem.objective(current_solution);
+    int best_obj = current_obj;
+    std::vector<RectanglePlacement> best_solution = current_solution;
+    bool improved = false;
+
+    // Evaluate all neighbors and find the best one
+    for (size_t i = 0; i < neighbors.size(); i++) {
+        int neighbor_obj = problem.objective(neighbors[i]);
+
+        if (neighbor_obj > best_obj) {
+            best_obj = neighbor_obj;
+            best_solution = neighbors[i];
+            improved = true;
+        }
+    }
+
+    // Update problem with best solution if improvement found
+    if (improved) {
+        problem.set_current_solution(best_solution);
+        return best_solution;
+    }
+
+    return current_solution;
+}

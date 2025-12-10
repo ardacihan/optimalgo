@@ -250,7 +250,7 @@ protected:
         int non_improving_count = 0;
         int iteration = 0;
 
-        double start_temperature = T * 2.0;
+        double start_temperature = T;
         double current_temperature = start_temperature;
         double min_temperature = 0.0;
         double cooling_rate = 0.94;

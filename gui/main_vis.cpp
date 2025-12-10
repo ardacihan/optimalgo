@@ -1,6 +1,6 @@
 #include "visualizer.h"
 
-int main2() {
+int main() {
     RectangleVisualizer visualizer(1200, 800);
     if (!visualizer.initialize()) {
         return -1;

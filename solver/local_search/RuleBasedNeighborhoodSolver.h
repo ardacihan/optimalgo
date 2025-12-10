@@ -10,12 +10,16 @@
 #include "LocalSearchSolver.h"
 
 class RuleBasedNeighborhoodSolver : public LocalSearchSolver {
+public:
+    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem, int T);
 protected:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem, int T) override;
     
     std::vector<std::vector<RectanglePlacement>> construct_neighbors_with_metadata(
         RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) override;
+
+
 
 private:
     std::vector<RectanglePlacement> apply_greedy_placement_indexed(

@@ -6,11 +6,22 @@
 #include "imgui_internal.h"
 #include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
 
+static int g_changed_rect_idx = -1;
+static bool g_objective_improved = false;
+
 void RectangleVisualizer::reset_relaxed_temperature() {
     if (relaxed_geometry_solver) {
-        // Reset temperature or any state if needed
-        // If your RelaxedGeometryBasedNeighborhoodSolver has a reset method, call it here
+        gui_config.T = 1000;
     }
+}
+
+void RectangleVisualizer::updateT() {
+    double current_temperature = gui_config.T;
+    double min_temperature = 0.0;
+    double cooling_rate = 0.94;
+    current_temperature = current_temperature * std::pow(cooling_rate, 1);
+    current_temperature = std::max(min_temperature, current_temperature);
+    gui_config.T = (int)current_temperature;
 }
 
 RectangleVisualizer::RectangleVisualizer(int width, int height)
@@ -200,6 +211,77 @@ void RectangleVisualizer::runSolver() {
     });
 }
 
+void RectangleVisualizer::solveNextStep() {
+    if (gui_config.T <= 0) gui_config.T = 1000;
+    static std::vector<RectanglePlacement> prev_solution;
+    static int prev_objective = 0;
+
+    if (prev_solution.empty()) {
+        prev_solution = problem.get_current_solution();
+        prev_objective = problem.objective(prev_solution);
+    }
+
+    std::vector<RectanglePlacement> new_solution;
+
+    switch (gui_config.local_search_strategy) {
+        case 0: // Geometry Based
+            if (!geometry_solver) {
+                geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+            }
+            new_solution = geometry_solver->solve_one_step(problem, gui_config.T);
+            current_placements = new_solution;
+            problem.set_current_solution(new_solution);
+            break;
+
+        case 1: // Permutation Based
+            if (!permutation_solver) {
+                permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+            }
+            new_solution = permutation_solver->solve_one_step(problem, gui_config.T);
+            current_placements = new_solution;
+            problem.set_current_solution(new_solution);
+            break;
+
+        case 2: // Relaxed Geometry Based
+            if (!relaxed_geometry_solver) {
+                relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
+            }
+            new_solution = relaxed_geometry_solver->solve_one_step(problem, gui_config.T);
+            current_placements = new_solution;
+            problem.set_current_solution(new_solution);
+            updateT();
+            break;
+    }
+
+    int new_objective = problem.objective(new_solution);
+
+    // Update visualization state
+    g_changed_rect_idx = -1;
+
+    if (new_solution.size() == prev_solution.size()) {
+        for (size_t i = 0; i < new_solution.size(); i++) {
+            if (new_solution[i].box_id != prev_solution[i].box_id ||
+                new_solution[i].x != prev_solution[i].x ||
+                new_solution[i].y != prev_solution[i].y ||
+                new_solution[i].rotated != prev_solution[i].rotated) {
+                g_changed_rect_idx = (int)i;
+                int moved_box = new_solution[i].box_id;
+
+                // Auto-switch to the box containing the moved rectangle
+                gui_config.view_all_boxes = false;
+                gui_config.current_box_view = moved_box;
+
+                break;
+            }
+        }
+    }
+
+    g_objective_improved = (new_objective < prev_objective);
+
+    // Update for next step
+    prev_solution = new_solution;
+    prev_objective = new_objective;
+}
 
 void RectangleVisualizer::revertToOriginal() {
     if (!original_placements.empty()) {
@@ -249,8 +331,17 @@ void RectangleVisualizer::render() {
         boxes_to_display = non_empty_boxes;
     } else {
         if (!non_empty_boxes.empty()) {
-            if (gui_config.current_box_view >= non_empty_boxes.size()) gui_config.current_box_view = 0;
-            boxes_to_display.push_back(non_empty_boxes[gui_config.current_box_view]);
+            // Find the actual index in non_empty_boxes that corresponds to box_id = current_box_view
+            int target_box_id = gui_config.current_box_view;
+            auto it = std::find(non_empty_boxes.begin(), non_empty_boxes.end(), target_box_id);
+
+            if (it != non_empty_boxes.end()) {
+                boxes_to_display.push_back(target_box_id);
+            } else {
+                // If target box doesn't exist, fallback to first box
+                gui_config.current_box_view = non_empty_boxes[0];
+                boxes_to_display.push_back(non_empty_boxes[0]);
+            }
         }
     }
 
@@ -273,11 +364,8 @@ void RectangleVisualizer::render() {
         draw_list->AddText(ImVec2(box_x + 5, box_y + 5), IM_COL32(255,255,255,255), box_label.c_str());
     }
 
-    ImU32 box_colors[] = {IM_COL32(65,105,225,200),IM_COL32(220,20,60,200),IM_COL32(50,205,50,200),
-                          IM_COL32(255,140,0,200),IM_COL32(148,0,211,200),IM_COL32(255,215,0,200),
-                          IM_COL32(0,206,209,200),IM_COL32(255,99,71,200)};
-
-    for (const auto& placement : display_placements) {
+    for (size_t idx = 0; idx < display_placements.size(); idx++) {
+        const auto& placement = display_placements[idx];
         if (!gui_config.view_all_boxes) {
             int current_box = boxes_to_display.empty() ? -1 : boxes_to_display[0];
             if (placement.box_id != current_box) continue;
@@ -294,7 +382,13 @@ void RectangleVisualizer::render() {
         float rect_x = box_x + placement.x * scale_factor;
         float rect_y = offset.y + placement.y * scale_factor;
 
-        ImU32 color = box_colors[placement.box_id % 8];
+        ImU32 color = IM_COL32(128, 128, 128, 150);
+
+        if ((int)idx == g_changed_rect_idx) {
+            color = g_objective_improved
+                ? IM_COL32(255, 255, 0, 200)   // Yellow fill if improved
+                : IM_COL32(0, 0, 255, 200);    // Blue fill if worse
+        }
 
         draw_list->AddRectFilled(ImVec2(rect_x, rect_y), ImVec2(rect_x + rect_w, rect_y + rect_h), color);
         draw_list->AddRect(ImVec2(rect_x, rect_y), ImVec2(rect_x + rect_w, rect_y + rect_h), IM_COL32(255,255,255,255),0.0f,0,1.5f);
@@ -330,9 +424,17 @@ void RectangleVisualizer::render() {
     ImGui::Text("Box Viewing:");
     ImGui::Checkbox("View All Boxes",&gui_config.view_all_boxes);
     if (!gui_config.view_all_boxes && non_empty_boxes.size()>0) {
-        if (gui_config.current_box_view>=non_empty_boxes.size()) gui_config.current_box_view=0;
-        ImGui::SliderInt("View Box",&gui_config.current_box_view,0,(int)non_empty_boxes.size()-1);
-        ImGui::Text("Viewing Box %d of %zu", gui_config.current_box_view+1, non_empty_boxes.size());
+        // Show slider based on actual box IDs, not indices
+        int min_box = non_empty_boxes.front();
+        int max_box = non_empty_boxes.back();
+
+        // Ensure current_box_view is valid
+        if (std::find(non_empty_boxes.begin(), non_empty_boxes.end(), gui_config.current_box_view) == non_empty_boxes.end()) {
+            gui_config.current_box_view = min_box;
+        }
+
+        ImGui::SliderInt("View Box (ID)",&gui_config.current_box_view, min_box, max_box);
+        ImGui::Text("Viewing Box ID: %d", gui_config.current_box_view);
     } else if (!gui_config.view_all_boxes && non_empty_boxes.empty()) {
         ImGui::Text("No boxes with rectangles to display");
     }
@@ -346,6 +448,11 @@ void RectangleVisualizer::render() {
     if (gui_config.solver_type == 0) {
         const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
         ImGui::Combo("Local Search Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
+        ImGui::BeginDisabled(is_solving);
+        if (ImGui::Button("Solve One Step")) {
+            solveNextStep();
+        }
+        ImGui::EndDisabled();
     } else {
         const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
         ImGui::Combo("Greedy Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));

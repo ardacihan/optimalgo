@@ -252,3 +252,37 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     return neighbors;
 }
+
+std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem, int T) {
+    std::vector<NeighborMetadata> dummy_metadata;
+    auto neighbors = construct_neighbors_with_metadata(problem, T, dummy_metadata);
+    int best_obj = problem.objective(problem.get_current_solution());
+    std::vector<RectanglePlacement> best_solution = problem.get_current_solution();
+    bool improved = false;
+
+    for (int i = 0; i < neighbors.size(); i++) {
+        // Temporarily apply the neighbor solution
+        std::vector<RectanglePlacement> original_solution = problem.get_current_solution();
+        problem.set_current_solution(neighbors[i]);
+
+        // Calculate objective for this neighbor
+        int neighbor_obj = problem.objective(neighbors[i]);
+
+        // Check if this neighbor is better
+        if (neighbor_obj > best_obj) {
+            best_obj = neighbor_obj;
+            best_solution = neighbors[i];
+            improved = true;
+        }
+
+        // Restore original solution to continue exploring neighbors
+        problem.set_current_solution(original_solution);
+    }
+
+    // If we found an improvement, update the problem with the best solution
+    if (improved) {
+        problem.set_current_solution(best_solution);
+    }
+
+    return problem.get_current_solution();
+}

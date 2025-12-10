@@ -29,8 +29,8 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     if (n == 0) return neighbors;
 
-    // Calculate overlap tolerance: T=2000 -> 1.0, T=0 -> 0.0
-    const double T_MAX = 2000.0;
+    // Calculate overlap tolerance: T=1000 -> 1.0, T=0 -> 0.0
+    const double T_MAX = 1000.0;
     double overlap_tolerance = std::max(0.0, std::min(1.0, T / T_MAX));
 
     // 1. Always get geometry-based moves (they're good quality)
@@ -205,4 +205,64 @@ bool RelaxedGeometryBasedNeighborhoodSolver::has_overlaps(
         }
     }
     return false;
+}
+
+
+// Add this method to your RelaxedGeometryBasedNeighborhoodSolver class
+
+std::vector<RectanglePlacement> RelaxedGeometryBasedNeighborhoodSolver::solve_one_step(
+    RectangleFittingProblem &problem, int T) {
+
+    // Get all neighbors based on current temperature
+    std::vector<NeighborMetadata> metadata;
+    auto neighbors = construct_neighbors_with_metadata(problem, T, metadata);
+
+    // Current solution and its objective
+    auto current_solution = problem.get_current_solution();
+    int current_obj = problem.objective(current_solution);
+
+    // If no neighbors, return current solution
+    if (neighbors.empty()) {
+        return current_solution;
+    }
+
+    // SIMULATED ANNEALING: Pick a random neighbor and decide whether to accept
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> idx_dist(0, neighbors.size() - 1);
+    std::uniform_real_distribution<double> prob_dist(0.0, 1.0);
+
+    // Select a random neighbor (not the best one!)
+    int random_idx = idx_dist(rng);
+    auto candidate_solution = neighbors[random_idx];
+    int candidate_obj = problem.objective(candidate_solution);
+
+    // Decide whether to accept this candidate
+    bool accept = false;
+
+    if (candidate_obj >= current_obj) {
+        // Always accept improvements (or equal solutions)
+        accept = true;
+    } else {
+        // For worse solutions, accept with probability based on temperature
+        // Higher T = more willing to accept worse solutions
+
+        int delta = current_obj - candidate_obj; // Positive when worse
+
+        // Metropolis criterion: P(accept) = exp(-delta / T)
+        // Since we're maximizing, larger delta (worse move) = lower probability
+        double acceptance_prob = std::exp(-delta / (double)T);
+
+        // Accept if random value is below acceptance probability
+        if (prob_dist(rng) < acceptance_prob) {
+            accept = true;
+        }
+    }
+
+    if (accept) {
+        problem.set_current_solution(candidate_solution);
+        return candidate_solution;
+    } else {
+        // Keep current solution
+        return current_solution;
+    }
 }
