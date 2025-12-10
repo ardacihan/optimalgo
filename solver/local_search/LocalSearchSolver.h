@@ -30,6 +30,11 @@ public:
     LocalSearchSolver() : gen(rd()) {}
     virtual ~LocalSearchSolver() = default;
 
+    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem,
+          int num_reruns,
+          int max_rectangle_in_subproblem,
+          int T);
+
     std::vector<RectanglePlacement>
     solve(RectangleFittingProblem &problem,
           int num_reruns,
