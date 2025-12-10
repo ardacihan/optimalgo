@@ -16,6 +16,10 @@ public:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors_with_metadata(
         RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) override;
 
+    void add_exploration_moves(const std::vector<RectanglePlacement> &solution, int L, double overlap_tolerance,
+                               std::vector<std::vector<RectanglePlacement>> &neighbors,
+                               std::vector<NeighborMetadata> &metadata, int max_neighbors);
+
     void generate_aggressive_moves(const std::vector<RectanglePlacement> &solution, int L,
                                    std::vector<std::vector<RectanglePlacement>> &neighbors,
                                    std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
@@ -43,6 +47,12 @@ private:
 
     long long calculate_total_overlap(
         const std::vector<RectanglePlacement>& solution);
+    static bool is_neighbor_acceptable(const std::vector<RectanglePlacement>& neighbor,
+                                   int L, double overlap_tolerance);
+
+    bool is_acceptable(const std::vector<RectanglePlacement> &neighbor, int L, double overlap_tolerance);
+
+    static bool has_overlaps(const std::vector<RectanglePlacement>& solution);
 };
 
 void reset_relaxed_temperature();

@@ -26,7 +26,7 @@ struct GUIConfig {
     int min_width = 5;
     int max_width = 20;
     int min_height = 5;
-    int max_height = 20;
+    int max_height = 10;
     bool view_all_boxes = true;
     int current_box_view = 0;
     bool show_solver_steps = false;

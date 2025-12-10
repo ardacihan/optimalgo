@@ -42,7 +42,7 @@ public:
 
         while (obj_new > obj) {
             obj = obj_new;
-            current_solution = solve(problem, num_reruns, max_rectangle_in_subproblem, T, 0.85);
+            current_solution = solve(problem, num_reruns, max_rectangle_in_subproblem, T, 0.80);
             obj_new = problem.objective(current_solution);
         }
         return current_solution;
@@ -185,8 +185,7 @@ protected:
         for (auto& batch : batches) {
             futures.push_back(std::async(std::launch::async, [this, batch, box_length, T]() {
                 std::thread::id tid = std::this_thread::get_id();
-                std::cout << "[Thread " << tid << "] Handling subproblem with "
-                          << batch.size() << " rectangles" << std::endl;
+
 
                 RectangleFittingProblem sub(box_length, batch);
                 int base_iterations = std::min(500, (int)batch.size() * 10);
@@ -249,7 +248,7 @@ protected:
         double start_temperature = T * 2.0;
         double current_temperature = start_temperature;
         double min_temperature = 0.0;
-        double cooling_rate = 0.89;
+        double cooling_rate = 0.94;
 
         while (non_improving_count < max_non_improving) {
             iteration++;

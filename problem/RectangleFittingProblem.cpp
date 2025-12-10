@@ -62,7 +62,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
     const int BOX_PENALTY = 1000000;
     const double TOUCHING_BONUS = 5.0;
-    const double SURFACE_BONUS = 3.0;
+    const double SURFACE_BONUS = 5.0;
 
     if (solution.empty()) return 0;
     if (!metrics_valid || cached_metrics.last_computed_T != T)
@@ -79,7 +79,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
     }
 
     // Overlap penalty grows exponentially with shrinking T
-    double overlap_penalty = cached_metrics.total_overlap_area * std::exp(2000.0 / std::max(T, 1));
+    double overlap_penalty = cached_metrics.total_overlap_area * std::exp(2000.0 / std::max(T, 1)) * 1000;
     double score = utilization_score * 10000 +
                    cached_metrics.total_touching_length * TOUCHING_BONUS +
                    cached_metrics.total_surface_touching * SURFACE_BONUS -
