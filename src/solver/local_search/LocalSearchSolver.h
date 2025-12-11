@@ -100,19 +100,6 @@ public:
         return current_solution;
     }
 
-    std::vector<RectanglePlacement>
-    solve_with_reruns(RectangleFittingProblem &problem,
-                      int num_reruns,
-                      int max_rectangle_in_subproblem,
-                      int T) override
-    {
-        return solve(problem, num_reruns, max_rectangle_in_subproblem, T);
-    }
-
-    void reset_move_ids(std::vector<RectanglePlacement>& sol) {
-        for (auto& r : sol)
-            r.move_id = -1;
-    }
 
 protected:
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
@@ -182,8 +169,7 @@ protected:
 
 
                 RectangleFittingProblem sub(box_length, batch);
-                int base_iterations = std::min(500, (int)batch.size() * 10);
-                return apply_local_search(sub, batch, base_iterations, 5, T);
+                return apply_local_search(sub, batch, 5, T);
             }));
         }
 
@@ -219,14 +205,12 @@ protected:
         std::vector<RectanglePlacement> merged = locked;
         merged.insert(merged.end(), active.begin(), active.end());
 
-        reset_move_ids(merged);
         return merged;
     }
 
     std::vector<RectanglePlacement> apply_local_search(
         RectangleFittingProblem &problem,
         std::vector<RectanglePlacement> initial,
-        int max_iterations = 2000,
         int max_non_improving = 5,
         int T = 1000)
     {
