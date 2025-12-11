@@ -14,13 +14,6 @@
 
 #include "../../solver/RectangleFittingProblemSolver.h"
 
-struct NeighborMetadata {
-    int changed_rect_idx;
-    bool can_use_delta;
-    NeighborMetadata() : changed_rect_idx(-1), can_use_delta(false) {}
-    NeighborMetadata(int idx) : changed_rect_idx(idx), can_use_delta(true) {}
-};
-
 class LocalSearchSolver : public RectangleFittingProblemSolver {
 private:
     std::random_device rd;
@@ -123,12 +116,8 @@ public:
 
 protected:
     virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors(
-        RectangleFittingProblem &problem, int T) = 0;
-
-    virtual std::vector<std::vector<RectanglePlacement>> construct_neighbors_with_metadata(
-        RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) {
+        RectangleFittingProblem &problem, int T) {
         auto neighbors = construct_neighbors(problem, T);
-        metadata.resize(neighbors.size());
         return neighbors;
     }
 
@@ -261,8 +250,7 @@ protected:
             current_temperature = std::max(min_temperature, current_temperature);
             int int_temperature = (int)current_temperature;
 
-            std::vector<NeighborMetadata> metadata;
-            auto neighbors = construct_neighbors_with_metadata(problem, int_temperature, metadata);
+            auto neighbors = construct_neighbors(problem, int_temperature);
             if (neighbors.empty()) break;
 
             int best_neighbor_obj = current_obj;

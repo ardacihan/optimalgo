@@ -10,13 +10,6 @@
 std::vector<std::vector<RectanglePlacement>>
 RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors(
     RectangleFittingProblem &problem, int T) {
-    std::vector<NeighborMetadata> metadata;
-    return construct_neighbors_with_metadata(problem, T, metadata);
-}
-
-std::vector<std::vector<RectanglePlacement>>
-RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
-    RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) {
 
     const auto& solution = problem.get_current_solution();
     int n = solution.size();
@@ -25,8 +18,6 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     const int MAX_NEIGHBORS = 400;
     std::vector<std::vector<RectanglePlacement>> neighbors;
     neighbors.reserve(MAX_NEIGHBORS);
-    metadata.clear();
-
     if (n == 0) return neighbors;
 
     // Calculate overlap tolerance: T=1000 -> 1.0, T=0 -> 0.0
@@ -34,19 +25,13 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     double overlap_tolerance = std::max(0.0, std::min(1.0, T / T_MAX));
 
     // 1. Always get geometry-based moves (they're good quality)
-    std::vector<NeighborMetadata> geo_metadata;
-    auto geo_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
-        problem, T, geo_metadata);
+    auto geo_neighbors = GeometryBasedNeighborhoodSolver::construct_neighbors(
+        problem, T);
 
     // Add all geometry moves that respect overlap tolerance
     for (size_t i = 0; i < geo_neighbors.size() && neighbors.size() < MAX_NEIGHBORS; i++) {
         if (is_acceptable(geo_neighbors[i], L, overlap_tolerance)) {
             neighbors.push_back(geo_neighbors[i]);
-            if (i < geo_metadata.size()) {
-                metadata.push_back(geo_metadata[i]);
-            } else {
-                metadata.push_back(NeighborMetadata());
-            }
         }
     }
 
@@ -54,7 +39,7 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     // 2. Add aggressive exploration moves at high temperature
     if (overlap_tolerance > 0.3) { // Only when T > 600
-        add_exploration_moves(solution, L, overlap_tolerance, neighbors, metadata, MAX_NEIGHBORS);
+        add_exploration_moves(solution, L, overlap_tolerance, neighbors, MAX_NEIGHBORS);
     }
 
     return neighbors;
@@ -65,7 +50,6 @@ void RelaxedGeometryBasedNeighborhoodSolver::add_exploration_moves(
     int L,
     double overlap_tolerance,
     std::vector<std::vector<RectanglePlacement>>& neighbors,
-    std::vector<NeighborMetadata>& metadata,
     int max_neighbors) {
 
     int n = solution.size();
@@ -94,7 +78,6 @@ void RelaxedGeometryBasedNeighborhoodSolver::add_exploration_moves(
 
         if (is_acceptable(neighbor, L, overlap_tolerance)) {
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(idx));
         }
     }
 
@@ -112,7 +95,6 @@ void RelaxedGeometryBasedNeighborhoodSolver::add_exploration_moves(
 
         if (is_acceptable(neighbor, L, overlap_tolerance)) {
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata());
         }
     }
 
@@ -149,7 +131,6 @@ void RelaxedGeometryBasedNeighborhoodSolver::add_exploration_moves(
 
                     if (is_acceptable(neighbor, L, overlap_tolerance)) {
                         neighbors.push_back(neighbor);
-                        metadata.push_back(NeighborMetadata(idx));
                     }
                 }
             }
@@ -214,8 +195,7 @@ std::vector<RectanglePlacement> RelaxedGeometryBasedNeighborhoodSolver::solve_on
     RectangleFittingProblem &problem, int T) {
 
     // Get all neighbors based on current temperature
-    std::vector<NeighborMetadata> metadata;
-    auto neighbors = construct_neighbors_with_metadata(problem, T, metadata);
+    auto neighbors = construct_neighbors(problem, T);
 
     // Current solution and its objective
     auto current_solution = problem.get_current_solution();

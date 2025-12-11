@@ -9,16 +9,7 @@ std::vector<std::vector<RectanglePlacement>>
 GeometryBasedNeighborhoodSolver::construct_neighbors(
     RectangleFittingProblem &problem, int T)
 {
-    std::vector<NeighborMetadata> dummy_metadata;
-    return construct_neighbors_with_metadata(problem, T, dummy_metadata);
-}
-
-std::vector<std::vector<RectanglePlacement>>
-GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
-    RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata)
-{
     std::vector<std::vector<RectanglePlacement>> neighbors;
-    metadata.clear();
 
     const auto& solution = problem.get_current_solution();
     int L = problem.get_box_length();
@@ -134,7 +125,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
                         neighbor[rect_idx].x = new_x;
                         neighbor[rect_idx].y = new_y;
                         neighbors.push_back(neighbor);
-                        metadata.push_back(NeighborMetadata(rect_idx));
                         break;
                     }
                 }
@@ -158,7 +148,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
                             neighbor[rect_idx].y = new_y;
                             neighbor[rect_idx].rotated = !moving_rect.rotated;
                             neighbors.push_back(neighbor);
-                            metadata.push_back(NeighborMetadata(rect_idx));
                             break;
                         }
                     }
@@ -184,7 +173,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             auto neighbor = solution;
             neighbor[rect_idx].x = rect.x - max_left;
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(rect_idx));
         }
 
         int max_right = 0;
@@ -196,7 +184,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             auto neighbor = solution;
             neighbor[rect_idx].x = rect.x + max_right;
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(rect_idx));
         }
 
         int max_up = 0;
@@ -208,7 +195,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             auto neighbor = solution;
             neighbor[rect_idx].y = rect.y - max_up;
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(rect_idx));
         }
 
         int max_down = 0;
@@ -220,7 +206,6 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
             auto neighbor = solution;
             neighbor[rect_idx].y = rect.y + max_down;
             neighbors.push_back(neighbor);
-            metadata.push_back(NeighborMetadata(rect_idx));
         }
     }
 
@@ -229,8 +214,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
 
 std::vector<RectanglePlacement> GeometryBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem, int T) {
-    std::vector<NeighborMetadata> dummy_metadata;
-    auto neighbors = construct_neighbors_with_metadata(problem, T, dummy_metadata);
+    auto neighbors = construct_neighbors(problem, T);
     int best_obj = problem.objective(problem.get_current_solution());
     std::vector<RectanglePlacement> best_solution = problem.get_current_solution();
     bool improved = false;

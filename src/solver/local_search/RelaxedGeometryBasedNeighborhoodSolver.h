@@ -14,29 +14,22 @@ public:
 
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem, int T) override;
-    
-    std::vector<std::vector<RectanglePlacement>> construct_neighbors_with_metadata(
-        RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) override;
+
 
     void add_exploration_moves(const std::vector<RectanglePlacement> &solution, int L, double overlap_tolerance,
-                               std::vector<std::vector<RectanglePlacement>> &neighbors,
-                               std::vector<NeighborMetadata> &metadata, int max_neighbors);
+                               std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors);
 
     void generate_aggressive_moves(const std::vector<RectanglePlacement> &solution, int L,
-                                   std::vector<std::vector<RectanglePlacement>> &neighbors,
-                                   std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+                                   std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors, int T);
 
     void generate_swap_focused_moves(RectangleFittingProblem &problem, const std::vector<RectanglePlacement> &solution,
-                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors,
-                                     std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors, int T);
 
     void generate_conservative_moves(RectangleFittingProblem &problem, const std::vector<RectanglePlacement> &solution,
-                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors,
-                                     std::vector<NeighborMetadata> &metadata, int max_neighbors, int T);
+                                     int L, std::vector<std::vector<RectanglePlacement>> &neighbors,int max_neighbors, int T);
 
     void generate_swap_moves(const std::vector<RectanglePlacement> &solution, int L,
-                             std::vector<std::vector<RectanglePlacement>> &neighbors,
-                             std::vector<NeighborMetadata> &metadata, int max_swaps);
+                             std::vector<std::vector<RectanglePlacement>> &neighbors, int max_swaps);
 
 private:
     std::vector<RectanglePlacement> generate_swap_move(

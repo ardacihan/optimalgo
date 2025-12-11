@@ -110,15 +110,10 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
     return result;
 }
 
-std::vector<std::vector<RectanglePlacement>>
-RuleBasedNeighborhoodSolver::construct_neighbors(RectangleFittingProblem &problem, int T) {
-    std::vector<NeighborMetadata> dummy_metadata;
-    return construct_neighbors_with_metadata(problem, T, dummy_metadata);
-}
 
 std::vector<std::vector<RectanglePlacement>>
-RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
-    RectangleFittingProblem &problem, int T, std::vector<NeighborMetadata>& metadata) {
+RuleBasedNeighborhoodSolver::construct_neighbors(
+    RectangleFittingProblem &problem, int T) {
 
     const auto& solution = problem.get_current_solution();
     int n = solution.size();
@@ -171,7 +166,6 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     std::vector<std::vector<RectanglePlacement>> neighbors;
     neighbors.reserve(MAX_NEIGHBORS);
-    metadata.resize(MAX_NEIGHBORS);
 
     std::unordered_set<size_t> visited_hashes;
     auto hash_solution = [](const std::vector<int>& ids) -> size_t {
@@ -226,14 +220,11 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
         std::swap(indices[i], indices[j]);
     }
-
-    metadata.resize(neighbors.size());
     return neighbors;
 }
 
 std::vector<RectanglePlacement> RuleBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem, int T) {
-    std::vector<NeighborMetadata> dummy_metadata;
-    auto neighbors = construct_neighbors_with_metadata(problem, T, dummy_metadata);
+    auto neighbors = construct_neighbors(problem, T);
     int best_obj = problem.objective(problem.get_current_solution());
     std::vector<RectanglePlacement> best_solution = problem.get_current_solution();
     bool improved = false;
