@@ -7,7 +7,7 @@ int main() {
     }
 
     // Main loop
-    while (!visualizer.shouldClose()) {
+        while (!visualizer.shouldClose()) {
         visualizer.pollEvents();
         visualizer.render();
     }

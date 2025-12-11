@@ -33,6 +33,7 @@ struct GUIConfig {
     int num_reruns = 3;
     int max_rectangle_in_subproblem = 100;
     int T = 1000;
+    int target_box_id = -1;
 
     // Solver type selection
     int solver_type = 0; // 0 = Local Search, 1 = Greedy

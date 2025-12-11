@@ -265,11 +265,11 @@ void RectangleVisualizer::solveNextStep() {
                 new_solution[i].y != prev_solution[i].y ||
                 new_solution[i].rotated != prev_solution[i].rotated) {
                 g_changed_rect_idx = (int)i;
-                int moved_box = new_solution[i].box_id;
 
                 // Auto-switch to the box containing the moved rectangle
                 gui_config.view_all_boxes = false;
-                gui_config.current_box_view = moved_box;
+                // Store the actual box_id that we want to view
+                gui_config.target_box_id = new_solution[i].box_id;
 
                 break;
             }
@@ -331,17 +331,21 @@ void RectangleVisualizer::render() {
         boxes_to_display = non_empty_boxes;
     } else {
         if (!non_empty_boxes.empty()) {
-            // Find the actual index in non_empty_boxes that corresponds to box_id = current_box_view
-            int target_box_id = gui_config.current_box_view;
-            auto it = std::find(non_empty_boxes.begin(), non_empty_boxes.end(), target_box_id);
-
-            if (it != non_empty_boxes.end()) {
-                boxes_to_display.push_back(target_box_id);
-            } else {
-                // If target box doesn't exist, fallback to first box
-                gui_config.current_box_view = non_empty_boxes[0];
-                boxes_to_display.push_back(non_empty_boxes[0]);
+            // Use index-based selection
+            if (gui_config.current_box_view >= non_empty_boxes.size()) {
+                gui_config.current_box_view = 0;
             }
+
+            // If we have a target box ID from solve_one_step, find its index
+            if (gui_config.target_box_id != -1) {
+                auto it = std::find(non_empty_boxes.begin(), non_empty_boxes.end(), gui_config.target_box_id);
+                if (it != non_empty_boxes.end()) {
+                    gui_config.current_box_view = std::distance(non_empty_boxes.begin(), it);
+                }
+                gui_config.target_box_id = -1; // Reset after using
+            }
+
+            boxes_to_display.push_back(non_empty_boxes[gui_config.current_box_view]);
         }
     }
 
@@ -424,17 +428,17 @@ void RectangleVisualizer::render() {
     ImGui::Text("Box Viewing:");
     ImGui::Checkbox("View All Boxes",&gui_config.view_all_boxes);
     if (!gui_config.view_all_boxes && non_empty_boxes.size()>0) {
-        // Show slider based on actual box IDs, not indices
-        int min_box = non_empty_boxes.front();
-        int max_box = non_empty_boxes.back();
-
-        // Ensure current_box_view is valid
-        if (std::find(non_empty_boxes.begin(), non_empty_boxes.end(), gui_config.current_box_view) == non_empty_boxes.end()) {
-            gui_config.current_box_view = min_box;
+        // Use index-based slider (0 to num_boxes-1)
+        int max_index = (int)non_empty_boxes.size() - 1;
+        if (gui_config.current_box_view > max_index) {
+            gui_config.current_box_view = 0;
         }
 
-        ImGui::SliderInt("View Box (ID)",&gui_config.current_box_view, min_box, max_box);
-        ImGui::Text("Viewing Box ID: %d", gui_config.current_box_view);
+        ImGui::SliderInt("Box Index", &gui_config.current_box_view, 0, max_index);
+
+        // Show the actual box ID for clarity
+        int actual_box_id = non_empty_boxes[gui_config.current_box_view];
+        ImGui::Text("Viewing Box %d (ID: %d)", gui_config.current_box_view + 1, actual_box_id);
     } else if (!gui_config.view_all_boxes && non_empty_boxes.empty()) {
         ImGui::Text("No boxes with rectangles to display");
     }
