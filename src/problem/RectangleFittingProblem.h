@@ -42,11 +42,8 @@ public:
     int objective(const std::vector<RectanglePlacement>& current_solution) override;
     int objective(const std::vector<RectanglePlacement>& current_solution, int T);
 
-    // Delta-based objective calculation for single rectangle move
     int objective_delta(const std::vector<RectanglePlacement>& new_solution,
                        int changed_rect_idx, int T);
-
-    int objective2(const std::vector<RectanglePlacement> &current_solution);
 
     bool solution_legal(const std::vector<RectanglePlacement>& current_solution) const override;
 
