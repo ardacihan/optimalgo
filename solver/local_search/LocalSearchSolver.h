@@ -270,13 +270,7 @@ protected:
             bool found_better_neighbor = false;
 
             for (size_t i = 0; i < neighbors.size(); ++i) {
-                int obj;
-                if (i < metadata.size() && metadata[i].can_use_delta) {
-                    obj = problem.objective_delta(neighbors[i], metadata[i].changed_rect_idx, int_temperature);
-                } else {
-                    obj = problem.objective(neighbors[i], int_temperature);
-                }
-
+                int obj = problem.objective(neighbors[i], int_temperature);
                 if (obj > best_neighbor_obj) {
                     best_neighbor_obj = obj;
                     best_neighbor = neighbors[i];

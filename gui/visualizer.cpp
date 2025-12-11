@@ -5,6 +5,7 @@
 #include <iomanip>
 #include "imgui_internal.h"
 #include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "../Benchmark.h"
 
 static int g_changed_rect_idx = -1;
 static bool g_objective_improved = false;
@@ -27,6 +28,8 @@ void RectangleVisualizer::updateT() {
 RectangleVisualizer::RectangleVisualizer(int width, int height)
     : box_length(15), scale_factor(1.0f), offset{50.0f, 50.0f}, initialized(false),
       is_solving(false), solver_thread_active(false),
+      is_benchmarking(false), benchmark_thread_active(false),
+      benchmark_status("Idle"),
       instance_generator(
           gui_config.box_size,
           gui_config.min_width,
@@ -63,6 +66,10 @@ RectangleVisualizer::RectangleVisualizer(int width, int height)
 RectangleVisualizer::~RectangleVisualizer() {
     if (solver_thread.joinable()) {
         solver_thread.join();
+    }
+
+    if (benchmark_thread.joinable()) {
+        benchmark_thread.join();
     }
 
     if (initialized) {
@@ -292,6 +299,97 @@ void RectangleVisualizer::revertToOriginal() {
     }
 }
 
+void RectangleVisualizer::runBenchmarkAsync() {
+    if (is_benchmarking || benchmark_thread_active) {
+        return;
+    }
+
+    if (benchmark_thread.joinable()) {
+        benchmark_thread.join();
+    }
+
+    is_benchmarking = true;
+    benchmark_thread_active = true;
+    benchmark_start_time = std::chrono::steady_clock::now();
+
+    benchmark_thread = std::thread([this]() {
+        {
+            std::lock_guard<std::mutex> lock(benchmark_mutex);
+            benchmark_status = "Preparing benchmark...";
+        }
+
+        bool quick_mode = true;
+
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "RECTANGLE PACKING SOLVER BENCHMARK" << std::endl;
+        std::cout << "========================================\n" << std::endl;
+
+        std::cout << "NOTE: This benchmark tests 6 solvers on each instance:" << std::endl;
+        std::cout << "  1. Geometry-Based Solver" << std::endl;
+        std::cout << "  2. Rule-Based Solver" << std::endl;
+        std::cout << "  3. Relaxed Geometry Solver" << std::endl;
+        std::cout << "  4. Greedy (Biggest First)" << std::endl;
+        std::cout << "  5. Greedy (Smallest First)" << std::endl;
+        std::cout << "  6. Greedy (Area Descending)" << std::endl;
+        std::cout << std::endl;
+
+        // Use fixed output filename
+        std::string output_filename = "benchmark_results.txt";
+        BenchmarkRunner runner(output_filename);
+
+        {
+            std::lock_guard<std::mutex> lock(benchmark_mutex);
+            benchmark_status = "Setting up configurations...";
+        }
+
+        if (gui_config.benchmark_fast) {
+            std::cout << "=== QUICK BENCHMARK MODE ===\n" << std::endl;
+
+            // Reduced for faster testing
+            runner.add_config({1, 500, 10, 20, 10, 20, 80});
+            runner.add_config({1, 500, 10, 20, 10, 20, 80});
+            runner.add_config({1, 500, 10, 40, 10, 40, 80});
+            runner.add_config({1, 500, 10, 40, 10, 40, 100});
+            runner.add_config({1, 1000, 10, 20, 10, 20, 80});
+            runner.add_config({1, 1000, 10, 20, 10, 20, 80});
+            runner.add_config({1, 1000, 10, 40, 10, 40, 80});
+            runner.add_config({1, 1000, 10, 40, 10, 40, 100});
+        } else {
+            std::cout << "=== FULL BENCHMARK MODE ===\n" << std::endl;
+
+            runner.add_config({3, 100, 5, 10, 5, 10, 20});
+            runner.add_config({3, 200, 5, 15, 5, 15, 30});
+            runner.add_config({2, 300, 10, 20, 10, 20, 50});
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(benchmark_mutex);
+            benchmark_status = "Running benchmark...";
+        }
+
+        runner.run_benchmark();
+
+        {
+            std::lock_guard<std::mutex> lock(benchmark_mutex);
+            benchmark_status = "Benchmark complete!";
+        }
+
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "BENCHMARK COMPLETE" << std::endl;
+        std::cout << "========================================\n" << std::endl;
+
+        // Wait a moment so the user can see the completion message
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        is_benchmarking = false;
+        benchmark_thread_active = false;
+    });
+}
+
+void RectangleVisualizer::runBenchmark() {
+    runBenchmarkAsync();
+}
+
 void RectangleVisualizer::pollEvents() {
     glfwPollEvents();
 }
@@ -452,7 +550,7 @@ void RectangleVisualizer::render() {
     if (gui_config.solver_type == 0) {
         const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
         ImGui::Combo("Local Search Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
-        ImGui::BeginDisabled(is_solving);
+        ImGui::BeginDisabled(is_solving || is_benchmarking);
         if (ImGui::Button("Solve One Step")) {
             solveNextStep();
         }
@@ -464,7 +562,7 @@ void RectangleVisualizer::render() {
 
     ImGui::Separator();
 
-    ImGui::BeginDisabled(is_solving);
+    ImGui::BeginDisabled(is_solving || is_benchmarking);
     if (ImGui::Button("Run Solver")) {
         gui_config.T = 1000;
         runSolver();
@@ -474,7 +572,7 @@ void RectangleVisualizer::render() {
     if (ImGui::Button("Revert")) revertToOriginal();
     ImGui::EndDisabled();
 
-    if (is_solving) {
+    if (is_solving && !is_benchmarking) {
         ImGui::Separator();
 
         auto now = std::chrono::steady_clock::now();
@@ -516,6 +614,47 @@ void RectangleVisualizer::render() {
             ImGui::Text("Utilization: %.1f%%", utilization);
         }
     }
+
+    ImGui::Separator();
+
+    // Benchmark section
+    ImGui::Text("Benchmark Configuration:");
+    static bool benchmark_fast_mode = true;
+    ImGui::Checkbox("Fast Benchmark Mode", &benchmark_fast_mode);
+    gui_config.benchmark_fast = benchmark_fast_mode;
+
+    ImGui::BeginDisabled(is_benchmarking || is_solving);
+    if (ImGui::Button("Run Benchmark")) {
+        runBenchmarkAsync();
+    }
+    ImGui::EndDisabled();
+
+    if (is_benchmarking) {
+        ImGui::Separator();
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - benchmark_start_time);
+
+        std::ostringstream time_ss;
+        time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
+                << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
+
+        int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
+        std::string benchmark_text = "Benchmarking";
+        for (int i = 0; i < dot_count; i++) {
+            benchmark_text += ".";
+        }
+
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s", benchmark_text.c_str());
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
+
+        // Show status message
+        std::lock_guard<std::mutex> lock(benchmark_mutex);
+        ImGui::Text("Status: %s", benchmark_status.c_str());
+    }
+
+
 
     ImGui::End();
     ImGui::Render();

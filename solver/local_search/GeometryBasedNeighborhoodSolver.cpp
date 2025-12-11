@@ -27,7 +27,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     if (n == 0) return neighbors;
 
-    const int MAX_NEIGHBORS = 1200;
+    const int MAX_NEIGHBORS = 1800;
     neighbors.reserve(MAX_NEIGHBORS);
 
     // Build occupancy grids and count cells per box

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <string>
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -34,6 +35,7 @@ struct GUIConfig {
     int max_rectangle_in_subproblem = 100;
     int T = 1000;
     int target_box_id = -1;
+    int benchmark_fast = true;
 
     // Solver type selection
     int solver_type = 0; // 0 = Local Search, 1 = Greedy
@@ -71,11 +73,18 @@ private:
     std::vector<RectanglePlacement> pending_result;
     std::chrono::steady_clock::time_point solver_start_time;
 
+    // Threading support for benchmark
+    std::thread benchmark_thread;
+    std::atomic<bool> is_benchmarking;
+    std::atomic<bool> benchmark_thread_active;
+    std::mutex benchmark_mutex;
+    std::chrono::steady_clock::time_point benchmark_start_time;
+    std::string benchmark_status;
+
     void updateScaleAndOffset();
     void updateMaxSizeLimits();
     void saveOriginalState();
     void reset_relaxed_temperature();
-
     void updateT();
 
 public:
@@ -90,6 +99,10 @@ public:
     void runSolver();
     void solveNextStep();
     void revertToOriginal();
+
+    void runBenchmarkAsync();
+    void runBenchmark();
+
     void pollEvents();
     void render();
     bool shouldClose() const;

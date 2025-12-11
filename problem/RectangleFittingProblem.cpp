@@ -61,7 +61,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
     const int BOX_PENALTY = 1000000;
-    const double TOUCHING_BONUS = 5.0;
+    const double TOUCHING_BONUS = 8.0;
     const double SURFACE_BONUS = 5.0;
 
     if (solution.empty()) return 0;
@@ -80,7 +80,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
 
     // Overlap penalty grows exponentially with shrinking T
     double overlap_penalty = cached_metrics.total_overlap_area * std::exp(2000.0 / std::max(T, 1)) * 1000;
-    double score = utilization_score * 10000 +
+    double score = utilization_score * 20000 +
                    cached_metrics.total_touching_length * TOUCHING_BONUS +
                    cached_metrics.total_surface_touching * SURFACE_BONUS -
                    num_boxes * BOX_PENALTY -
@@ -200,9 +200,6 @@ int RectangleFittingProblem::objective_delta(
     return (int)std::clamp(score, (double)INT_MIN/2.0, (double)INT_MAX/2.0);
 }
 
-int RectangleFittingProblem::objective2(const std::vector<RectanglePlacement> &current_solution) {
-    return objective(current_solution);
-}
 
 bool RectangleFittingProblem::check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const {
     for (size_t i = 0; i < current_solution.size(); ++i) {
@@ -235,18 +232,4 @@ bool RectangleFittingProblem::check_within_boxes(const std::vector<RectanglePlac
 
 bool RectangleFittingProblem::solution_legal(const std::vector<RectanglePlacement>& current_solution) const {
     return check_no_overlaps(current_solution) && check_within_boxes(current_solution);
-}
-
-bool RectangleFittingProblem::edges_touching(const RectanglePlacement& r1, const RectanglePlacement& r2) {
-    if (r1.collides(r2)) return false;
-
-    int w1 = r1.get_actual_width(), h1 = r1.get_actual_height();
-    int w2 = r2.get_actual_width(), h2 = r2.get_actual_height();
-
-    bool vertical = (r1.x + w1 == r2.x || r2.x + w2 == r1.x) &&
-                    !(r1.y + h1 <= r2.y || r2.y + h2 <= r1.y);
-    bool horizontal = (r1.y + h1 == r2.y || r2.y + h2 == r1.y) &&
-                      !(r1.x + w1 <= r2.x || r2.x + w2 <= r1.x);
-
-    return vertical || horizontal;
 }
