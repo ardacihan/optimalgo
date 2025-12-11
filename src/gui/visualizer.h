@@ -13,7 +13,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "../problem/RectanglePlacement.h"
-#include "InstanceGenerator.h"
+#include "../problem/InstanceGenerator.h"
 #include "../problem/RectangleFittingProblem.h"
 
 #include "../solver/local_search/GeometryBasedNeighborhoodSolver.h"

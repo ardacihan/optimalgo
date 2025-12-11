@@ -14,7 +14,7 @@
 #include <numeric>
 #include "solver/RectangleFittingProblemSolver.h"
 #include "problem/RectangleFittingProblem.h"
-#include "gui/InstanceGenerator.h"
+#include "problem/InstanceGenerator.h"
 // ============================================================================
 // FILE: benchmark.cpp - Comprehensive Solver Benchmark
 // ============================================================================
@@ -30,7 +30,7 @@
 #include <numeric>
 #include <sstream>
 #include "problem/RectangleFittingProblem.h"
-#include "gui/InstanceGenerator.h"
+#include "problem/InstanceGenerator.h"
 #include "solver/local_search/GeometryBasedNeighborhoodSolver.h"
 #include "solver/local_search/RuleBasedNeighborhoodSolver.h"
 #include "solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"

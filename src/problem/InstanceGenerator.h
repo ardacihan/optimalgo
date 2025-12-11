@@ -1,7 +1,7 @@
 #ifndef INSTANCEGENERATOR_H
 #define INSTANCEGENERATOR_H
 
-#include "../problem/RectanglePlacement.h"
+#include "RectanglePlacement.h"
 #include <vector>
 
 class InstanceGenerator {
