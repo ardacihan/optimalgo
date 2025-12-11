@@ -1,10 +1,10 @@
 #ifndef OPTIMALGO_GREEDYSOLVER_H
 #define OPTIMALGO_GREEDYSOLVER_H
 
-#include "problem/RectangleFittingProblem.h"
+#include "../../problem/RectangleFittingProblem.h"
 #include <vector>
 #include <memory>
-#include "solver/RectangleFittingProblemSolver.h"
+#include "../../solver/RectangleFittingProblemSolver.h"
 
 class GreedySolver : public RectangleFittingProblemSolver {
 public:

@@ -1,5 +1,5 @@
 #include "GeometryBasedNeighborhoodSolver.h"
-#include "problem/BoxOccupancyUtil.h"
+#include "../../problem/BoxOccupancyUtil.h"
 #include <vector>
 #include <algorithm>
 #include <iostream>

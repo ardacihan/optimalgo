@@ -25,8 +25,8 @@ set(IMGUI_SOURCES
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-        solver/RectangleFittingProblemSolver.cpp
-        solver/RectangleFittingProblemSolver.h
+        src/solver/RectangleFittingProblemSolver.cpp
+        src/solver/RectangleFittingProblemSolver.h
 )
 
 add_library(imgui STATIC ${IMGUI_SOURCES})
@@ -39,20 +39,20 @@ target_link_libraries(imgui PUBLIC ${glfw_LIBRARIES} OpenGL::GL)
 
 # Your executable
 add_executable(optimalgo
-        problem/RectanglePlacement.cpp
-        gui/InstanceGenerator.cpp
-        problem/OptimizationProblem.cpp
-        problem/RectangleFittingProblem.cpp
-        solver/local_search/GeometryBasedNeighborhoodSolver.cpp
-        solver/local_search/RuleBasedNeighborhoodSolver.cpp
-        gui/visualizer.cpp
-        gui/main_vis.cpp
-        solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.cpp
-        problem/BoxOccupancyUtil.cpp
-        problem/BoxOccupancyUtil.h
-        solver/greedy/GreedySolver.cpp
-        Benchmark.cpp
-        Benchmark.h
+        src/problem/RectanglePlacement.cpp
+        src/gui/InstanceGenerator.cpp
+        src/problem/OptimizationProblem.cpp
+        src/problem/RectangleFittingProblem.cpp
+        src/solver/local_search/GeometryBasedNeighborhoodSolver.cpp
+        src/solver/local_search/RuleBasedNeighborhoodSolver.cpp
+        src/gui/visualizer.cpp
+        src/gui/main_vis.cpp
+        src/solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.cpp
+        src/problem/BoxOccupancyUtil.cpp
+        src/problem/BoxOccupancyUtil.h
+        src/solver/greedy/GreedySolver.cpp
+        src/Benchmark.cpp
+        src/Benchmark.h
 )
 
 target_include_directories(optimalgo PUBLIC

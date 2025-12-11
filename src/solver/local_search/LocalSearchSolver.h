@@ -12,7 +12,7 @@
 #include <future>
 #include <thread>
 
-#include "solver/RectangleFittingProblemSolver.h"
+#include "../../solver/RectangleFittingProblemSolver.h"
 
 struct NeighborMetadata {
     int changed_rect_idx;
