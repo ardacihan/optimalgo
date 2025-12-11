@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: solver/local_search/RuleBasedNeighborhoodSolver.cpp (OPTIMIZED 2X)
+// FILE: solver/local_search/RuleBasedNeighborhoodSolver.cpp (FIXED)
 // ============================================================================
 #include "RuleBasedNeighborhoodSolver.h"
 #include <vector>
@@ -12,8 +12,6 @@
 #include <random>
 #include <functional>
 #include <bitset>
-
-static const int MAX_L = 10000;
 
 bool collides_fast(const std::vector<int>& grid, int x, int y, int w, int h, int L) {
     int idx = y * L + x;
@@ -46,10 +44,12 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
     std::vector<RectanglePlacement> result;
     result.reserve(rect_indices.size());
 
-    std::vector<std::vector<int>> occupancy_grids(1, std::vector<int>(L * L, -1));
-    std::vector<int> box_ids = {rect_indices[0]};
-    int current_box = 0;
-    int placed_count = 0;
+    // Start with one empty box
+    std::vector<std::vector<int>> occupancy_grids;
+    occupancy_grids.emplace_back(L * L, -1);
+
+    int next_box_id = 0;  // Counter for assigning box IDs
+    int current_box = 0;  // Index of the box we're currently trying to fill
 
     for (size_t i = 0; i < rect_indices.size(); i++) {
         int idx = rect_indices[i];
@@ -58,6 +58,7 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
 
         bool placed = false;
 
+        // Try to place in current box
         if (current_box < occupancy_grids.size()) {
             auto& grid = occupancy_grids[current_box];
 
@@ -73,26 +74,26 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
                 for (int y = 0; y <= max_y && !placed; y++) {
                     for (int x = 0; x <= max_x && !placed; x++) {
                         if (!collides_fast(grid, x, y, w, h, L)) {
-                            result.emplace_back(width, height, x, y, (rot == 1), box_ids[current_box]);
+                            result.emplace_back(width, height, x, y, (rot == 1), current_box);
                             fill_grid_fast(grid, x, y, w, h, L, idx);
                             placed = true;
-                            placed_count++;
                         }
                     }
                 }
             }
         }
 
+        // If we couldn't place it in the current box, create a new box
         if (!placed) {
+            current_box = occupancy_grids.size();
             occupancy_grids.emplace_back(L * L, -1);
-            box_ids.push_back(idx);
-            current_box++;
 
             auto& grid = occupancy_grids.back();
             int w = std::min(width, L);
             int h = std::min(height, L);
             bool rotated = false;
 
+            // Try rotation if original dimensions don't fit
             if (width > L || height > L) {
                 if (height <= L && width <= L && width != height) {
                     std::swap(w, h);
@@ -100,13 +101,9 @@ RuleBasedNeighborhoodSolver::apply_greedy_placement_indexed(
                 }
             }
 
-            result.emplace_back(width, height, 0, 0, rotated, idx);
+            result.emplace_back(width, height, 0, 0, rotated, current_box);
             fill_grid_fast(grid, 0, 0, w, h, L, idx);
-            placed_count++;
-        }
-
-        if (placed_count > 0 && placed_count % 50 == 0 && current_box < occupancy_grids.size() - 2) {
-            current_box++;
+            placed = true;
         }
     }
 
@@ -161,7 +158,6 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
 
     static std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<int> dist(0, n-1);
-    std::uniform_int_distribution<int> box_dist(0, frequent_boxes.size()-1);
 
     for (int s = 0; s < MAX_SWAPS; s++) {
         int i = dist(rng);
@@ -196,9 +192,10 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
         if (visited_hashes.insert(h).second) {
             auto new_solution = apply_greedy_placement_indexed(indices, rect_dims, L);
             if (new_solution.size() == n) {
+                // Map the new box IDs back to try to preserve the original box structure
                 std::unordered_map<int, int> box_mapping;
                 std::vector<bool> used(max_box_id + 10, false);
-                int next_id = max_box_id + 1;
+                int next_id = 0;
 
                 for (size_t k = 0; k < new_solution.size(); k++) {
                     int new_box = new_solution[k].box_id;
@@ -234,41 +231,36 @@ RuleBasedNeighborhoodSolver::construct_neighbors_with_metadata(
     return neighbors;
 }
 
-std::vector<RectanglePlacement> RuleBasedNeighborhoodSolver::solve_one_step(
-    RectangleFittingProblem &problem, int T) {
-
-    // Get neighbors using rule-based swaps
-    std::vector<NeighborMetadata> metadata;
-    auto neighbors = construct_neighbors_with_metadata(problem, T, metadata);
-
-    // Early return if no neighbors generated
-    if (neighbors.empty()) {
-        return problem.get_current_solution();
-    }
-
-    // Evaluate current solution
-    auto current_solution = problem.get_current_solution();
-    int current_obj = problem.objective(current_solution);
-    int best_obj = current_obj;
-    std::vector<RectanglePlacement> best_solution = current_solution;
+std::vector<RectanglePlacement> RuleBasedNeighborhoodSolver::solve_one_step(RectangleFittingProblem &problem, int T) {
+    std::vector<NeighborMetadata> dummy_metadata;
+    auto neighbors = construct_neighbors_with_metadata(problem, T, dummy_metadata);
+    int best_obj = problem.objective(problem.get_current_solution());
+    std::vector<RectanglePlacement> best_solution = problem.get_current_solution();
     bool improved = false;
 
-    // Evaluate all neighbors and find the best one
-    for (size_t i = 0; i < neighbors.size(); i++) {
+    for (int i = 0; i < neighbors.size(); i++) {
+        // Temporarily apply the neighbor solution
+        std::vector<RectanglePlacement> original_solution = problem.get_current_solution();
+        problem.set_current_solution(neighbors[i]);
+
+        // Calculate objective for this neighbor
         int neighbor_obj = problem.objective(neighbors[i]);
 
+        // Check if this neighbor is better
         if (neighbor_obj > best_obj) {
             best_obj = neighbor_obj;
             best_solution = neighbors[i];
             improved = true;
         }
+
+        // Restore original solution to continue exploring neighbors
+        problem.set_current_solution(original_solution);
     }
 
-    // Update problem with best solution if improvement found
+    // If we found an improvement, update the problem with the best solution
     if (improved) {
         problem.set_current_solution(best_solution);
-        return best_solution;
     }
 
-    return current_solution;
+    return problem.get_current_solution();
 }
