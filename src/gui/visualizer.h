@@ -8,17 +8,14 @@
 #include <atomic>
 #include <chrono>
 #include <string>
-#include <GLFW/glfw3.h>
 #include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include "../problem/RectanglePlacement.h"
-#include "../problem/InstanceGenerator.h"
+#include "../problem/primitives/RectanglePlacement.h"
+#include "../problem/primitives/InstanceGenerator.h"
 #include "../problem/RectangleFittingProblem.h"
 
-#include "../solver/local_search/GeometryBasedNeighborhoodSolver.h"
-#include "../solver/local_search/RuleBasedNeighborhoodSolver.h"
-#include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "../solver/local_search/specialized_solvers/GeometryBasedNeighborhoodSolver.h"
+#include "../solver/local_search/specialized_solvers/RuleBasedNeighborhoodSolver.h"
+#include "../solver/local_search/specialized_solvers/RelaxedGeometryBasedNeighborhoodSolver.h"
 #include "../solver/greedy/GreedySolver.h"
 
 struct GUIConfig {

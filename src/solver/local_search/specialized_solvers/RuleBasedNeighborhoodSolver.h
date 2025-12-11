@@ -5,9 +5,9 @@
 #ifndef RULEBASEDNEIGHBORHOODSOLVER_H
 #define RULEBASEDNEIGHBORHOODSOLVER_H
 
-#include "../../problem/RectangleFittingProblem.h"
+#include "../../../problem/RectangleFittingProblem.h"
 #include <vector>
-#include "LocalSearchSolver.h"
+#include "../LocalSearchSolver.h"
 
 class RuleBasedNeighborhoodSolver : public LocalSearchSolver {
 public:

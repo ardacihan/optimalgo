@@ -14,26 +14,15 @@
 #include <numeric>
 #include "solver/RectangleFittingProblemSolver.h"
 #include "problem/RectangleFittingProblem.h"
-#include "problem/InstanceGenerator.h"
+#include "problem/primitives/InstanceGenerator.h"
 // ============================================================================
 // FILE: benchmark.cpp - Comprehensive Solver Benchmark
 // ============================================================================
 #include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <chrono>
-#include <iomanip>
 #include <cmath>
-#include <map>
-#include <algorithm>
-#include <numeric>
-#include <sstream>
-#include "problem/RectangleFittingProblem.h"
-#include "problem/InstanceGenerator.h"
-#include "solver/local_search/GeometryBasedNeighborhoodSolver.h"
-#include "solver/local_search/RuleBasedNeighborhoodSolver.h"
-#include "solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "solver/local_search/specialized_solvers/GeometryBasedNeighborhoodSolver.h"
+#include "solver/local_search/specialized_solvers/RuleBasedNeighborhoodSolver.h"
+#include "solver/local_search/specialized_solvers/RelaxedGeometryBasedNeighborhoodSolver.h"
 #include "solver/greedy/GreedySolver.h"
 
 // Test configuration tuple: (num_instances, num_rectangles, min_w, max_w, min_h, max_h, box_length)

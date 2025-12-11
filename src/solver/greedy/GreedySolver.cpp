@@ -73,11 +73,6 @@ std::vector<RectanglePlacement> GreedySolver::solve_smallest_first(RectangleFitt
     return result;
 }
 
-std::vector<RectanglePlacement> GreedySolver::solve_with_reruns(RectangleFittingProblem &problem,
-                                                               int num_reruns,
-                                                               int max_rectangle_in_subproblem, int T) {
-    return solve(problem, num_reruns, max_rectangle_in_subproblem,T);
-}
 
 RectanglePlacement GreedySolver::place_rectangle(RectangleFittingProblem &problem,
                                                 const RectanglePlacement &selected_rect,

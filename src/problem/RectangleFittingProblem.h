@@ -5,7 +5,7 @@
 #define RECTANGLEFITTINGPROBLEM_H
 
 #include "OptimizationProblem.h"
-#include "RectanglePlacement.h"
+#include "primitives/RectanglePlacement.h"
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>

@@ -3,8 +3,12 @@
 #include <unordered_set>
 #include <sstream>
 #include <iomanip>
+#include <GLFW/glfw3.h>
 #include "imgui_internal.h"
-#include "../solver/local_search/RelaxedGeometryBasedNeighborhoodSolver.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "../solver/local_search/specialized_solvers/RelaxedGeometryBasedNeighborhoodSolver.h"
 #include "../Benchmark.h"
 
 static int g_changed_rect_idx = -1;

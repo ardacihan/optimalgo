@@ -1,9 +1,9 @@
 #ifndef GEOMETRYBASEDNEIGHBORHOODSOLVER_H
 #define GEOMETRYBASEDNEIGHBORHOODSOLVER_H
 
-#include "../../problem/RectangleFittingProblem.h"
+#include "../../../problem/RectangleFittingProblem.h"
 #include <vector>
-#include "LocalSearchSolver.h"
+#include "../LocalSearchSolver.h"
 
 class GeometryBasedNeighborhoodSolver : public LocalSearchSolver {
 public:

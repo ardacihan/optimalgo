@@ -23,8 +23,6 @@ public:
     virtual std::vector<RectanglePlacement> solve(RectangleFittingProblem &problem, int num_reruns,
                                                   int max_rectangle_in_subproblem, int T) {return std::vector<RectanglePlacement>();};
 
-    virtual std::vector<RectanglePlacement> solve_with_reruns(RectangleFittingProblem &problem, int num_reruns,
-                                      int max_rectangle_in_subproblem, int T) {return std::vector<RectanglePlacement>();};
 
 };
 
