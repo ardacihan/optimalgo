@@ -322,56 +322,20 @@ void RectangleVisualizer::runBenchmarkAsync() {
             benchmark_status = "Preparing benchmark...";
         }
 
-        bool quick_mode = true;
-
         std::cout << "\n========================================" << std::endl;
         std::cout << "RECTANGLE PACKING SOLVER BENCHMARK" << std::endl;
         std::cout << "========================================\n" << std::endl;
-
-        std::cout << "NOTE: This benchmark tests 6 solvers on each instance:" << std::endl;
-        std::cout << "  1. Geometry-Based Solver" << std::endl;
-        std::cout << "  2. Rule-Based Solver" << std::endl;
-        std::cout << "  3. Relaxed Geometry Solver" << std::endl;
-        std::cout << "  4. Greedy (Biggest First)" << std::endl;
-        std::cout << "  5. Greedy (Smallest First)" << std::endl;
-        std::cout << "  6. Greedy (Area Descending)" << std::endl;
-        std::cout << std::endl;
-
-        // Use fixed output filename
-        std::string output_filename = "benchmark_results.txt";
-        BenchmarkRunner runner(output_filename);
-
-        {
-            std::lock_guard<std::mutex> lock(benchmark_mutex);
-            benchmark_status = "Setting up configurations...";
-        }
-
-        if (gui_config.benchmark_fast) {
-            std::cout << "=== QUICK BENCHMARK MODE ===\n" << std::endl;
-
-            // Reduced for faster testing
-            runner.add_config({1, 500, 10, 20, 10, 20, 80});
-            runner.add_config({1, 500, 10, 20, 10, 20, 80});
-            runner.add_config({1, 500, 10, 40, 10, 40, 80});
-            runner.add_config({1, 500, 10, 40, 10, 40, 100});
-            runner.add_config({1, 1000, 10, 20, 10, 20, 80});
-            runner.add_config({1, 1000, 10, 20, 10, 20, 80});
-            runner.add_config({1, 1000, 10, 40, 10, 40, 80});
-            runner.add_config({1, 1000, 10, 40, 10, 40, 100});
-        } else {
-            std::cout << "=== FULL BENCHMARK MODE ===\n" << std::endl;
-
-            runner.add_config({3, 100, 5, 10, 5, 10, 20});
-            runner.add_config({3, 200, 5, 15, 5, 15, 30});
-            runner.add_config({2, 300, 10, 20, 10, 20, 50});
-        }
 
         {
             std::lock_guard<std::mutex> lock(benchmark_mutex);
             benchmark_status = "Running benchmark...";
         }
 
-        runner.run_benchmark();
+        if (gui_config.benchmark_fast) {
+            Benchmark::runNormal();
+        } else {
+            Benchmark::runHeavy();
+        }
 
         {
             std::lock_guard<std::mutex> lock(benchmark_mutex);
@@ -382,7 +346,6 @@ void RectangleVisualizer::runBenchmarkAsync() {
         std::cout << "BENCHMARK COMPLETE" << std::endl;
         std::cout << "========================================\n" << std::endl;
 
-        // Wait a moment so the user can see the completion message
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         is_benchmarking = false;
@@ -393,6 +356,7 @@ void RectangleVisualizer::runBenchmarkAsync() {
 void RectangleVisualizer::runBenchmark() {
     runBenchmarkAsync();
 }
+
 
 void RectangleVisualizer::pollEvents() {
     glfwPollEvents();
