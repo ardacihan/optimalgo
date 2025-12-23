@@ -1,3 +1,4 @@
+// LocalSearchSolver.h
 #ifndef OPTIMALGO_SOLVER_H
 #define OPTIMALGO_SOLVER_H
 
@@ -38,11 +39,23 @@ public:
         auto obj = problem.objective(current_solution);
         auto obj_new = obj + 10;
 
+        std::cout << "=== Starting Multi-Round Local Search ===" << std::endl;
+        std::cout << "Initial objective: " << obj << std::endl;
+
+        int round = 0;
         while (obj_new > obj) {
+            round++;
             obj = obj_new;
-            current_solution = solve(problem, num_reruns, max_rectangle_in_subproblem, T, 0.80);
+            std::cout << "\n--- Round " << round << " ---" << std::endl;
+            current_solution = solve(problem, 0, max_rectangle_in_subproblem, T, 0.80);
             obj_new = problem.objective(current_solution);
+            std::cout << "Round " << round << " objective: " << obj_new << std::endl;
         }
+
+        std::cout << "\n=== Local Search Complete ===" << std::endl;
+        std::cout << "Final objective: " << obj << std::endl;
+        std::cout << "Total rounds: " << round - 1 << std::endl;
+
         return current_solution;
     }
 
@@ -57,15 +70,19 @@ public:
         if (current_solution.empty()) return current_solution;
 
         int current_obj = problem.objective(current_solution, T);
+        std::cout << "  Starting solve with lock_threshold=" << lock_threshold
+                  << ", total rectangles=" << current_solution.size() << std::endl;
 
         int rerun_count = 0;
-        int max_reruns = std::max(1, num_reruns);
+        int max_reruns = std::max(1, 1);
 
         int current_max_subproblem = max_rectangle_in_subproblem;
         int max_global_limit = (int)current_solution.size();
         int growth_step = 5;
 
         while (rerun_count < max_reruns) {
+            rerun_count++;
+            std::cout << "\n  Rerun " << rerun_count << "/" << max_reruns << std::endl;
 
             auto previous_solution = current_solution;
             int previous_obj = current_obj;
@@ -73,7 +90,13 @@ public:
             auto [locked, active] = filter_by_utilization(
                 current_solution, problem.get_box_length(), lock_threshold);
 
-            if (active.empty()) break;
+            std::cout << "    Locked rectangles: " << locked.size() << std::endl;
+            std::cout << "    Active rectangles: " << active.size() << std::endl;
+
+            if (active.empty()) {
+                std::cout << "    No active rectangles to optimize" << std::endl;
+                break;
+            }
 
             auto optimized_active = solve_subproblem(
                 active,
@@ -87,14 +110,18 @@ public:
 
             current_obj = problem.objective(current_solution, T);
 
+            std::cout << "    Previous objective: " << previous_obj << std::endl;
+            std::cout << "    Current objective: " << current_obj << std::endl;
+            std::cout << "    Improvement: " << (current_obj - previous_obj) << std::endl;
+
             if (current_obj <= previous_obj) {
                 current_max_subproblem = std::min(
                     current_max_subproblem + growth_step,
                     max_global_limit
                 );
+                std::cout << "    No improvement - increasing max subproblem size to "
+                          << current_max_subproblem << std::endl;
             }
-
-            rerun_count++;
         }
 
         return current_solution;
@@ -162,23 +189,56 @@ protected:
         }
         if (!current_batch.empty()) batches.push_back(std::move(current_batch));
 
-        std::vector<std::future<std::vector<RectanglePlacement>>> futures;
-        for (auto& batch : batches) {
-            futures.push_back(std::async(std::launch::async, [this, batch, box_length, T]() {
-                std::thread::id tid = std::this_thread::get_id();
+        std::cout << "      Created " << batches.size() << " subproblem batch(es)" << std::endl;
+        for (size_t i = 0; i < batches.size(); i++) {
+            // Collect unique box IDs in this batch
+            std::set<int> box_ids;
+            for (const auto& r : batches[i]) {
+                box_ids.insert(r.box_id);
+            }
 
+            std::cout << "      Batch " << (i+1) << ": " << batches[i].size()
+                      << " rectangles, box IDs: {";
+            bool first = true;
+            for (int box_id : box_ids) {
+                if (!first) std::cout << ", ";
+                std::cout << box_id;
+                first = false;
+            }
+            std::cout << "}" << std::endl;
+        }
 
-                RectangleFittingProblem sub(box_length, batch);
-                return apply_local_search(sub, batch, 5, T);
+        std::vector<std::future<std::pair<std::vector<RectanglePlacement>, int>>> futures;
+        for (size_t i = 0; i < batches.size(); i++) {
+            futures.push_back(std::async(std::launch::async, 
+                [this, batch = batches[i], box_length, T, i]() {
+                    std::thread::id tid = std::this_thread::get_id();
+
+                    RectangleFittingProblem sub(box_length, batch);
+                    int initial_obj = sub.objective(batch, T);
+                    auto result = apply_local_search(sub, batch, 5, T);
+                    int final_obj = sub.objective(result, T);
+                    
+                    std::cout << "        [Thread " << tid << "] Batch " << (i+1) 
+                              << " - Initial obj: " << initial_obj 
+                              << ", Final obj: " << final_obj 
+                              << ", Improvement: " << (final_obj - initial_obj) << std::endl;
+                    
+                    return std::make_pair(result, final_obj);
             }));
         }
 
         std::vector<RectanglePlacement> merged;
         merged.reserve(rectangles.size());
-        for (auto& f : futures) {
-            auto res = f.get();
+        int total_subproblem_obj = 0;
+        
+        for (size_t i = 0; i < futures.size(); i++) {
+            auto [res, obj] = futures[i].get();
             merged.insert(merged.end(), res.begin(), res.end());
+            total_subproblem_obj += obj;
         }
+
+        std::cout << "      Total subproblem objective: " << total_subproblem_obj << std::endl;
 
         return merged;
     }
