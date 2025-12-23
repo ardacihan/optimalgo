@@ -54,6 +54,15 @@ private:
         const std::function<bool(int, int, int, bool, int)>& can_place,
         int max_neighbors);
 
+    bool try_skyline_placements(std::vector<std::vector<RectanglePlacement>> &neighbors,
+                                const std::vector<RectanglePlacement> &solution, int rect_idx, int target_box,
+                                int box_length, const std::function<bool(int, int, int, bool, int)> &can_place,
+                                int max_neighbors);
+
+    bool try_greedy_placements(std::vector<std::vector<RectanglePlacement>> &neighbors,
+                               const std::vector<RectanglePlacement> &solution, int rect_idx, int target_box,
+                               const std::function<bool(int, int, int, bool, int)> &can_place, int max_neighbors);
+
     void generate_shift_neighbors(
         std::vector<std::vector<RectanglePlacement>>& neighbors,
         const std::vector<RectanglePlacement>& solution,

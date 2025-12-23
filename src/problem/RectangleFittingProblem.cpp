@@ -60,9 +60,9 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
 }
 
 int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
-    const int BOX_PENALTY = 1000000;
-    const double TOUCHING_BONUS = 8.0;
-    const double SURFACE_BONUS = 5.0;
+    const int BOX_PENALTY = 10000000;
+    const double TOUCHING_BONUS = 2.0;
+    const double SURFACE_BONUS = 1.5;
 
     if (solution.empty()) return 0;
     if (!metrics_valid || cached_metrics.last_computed_T != T)
@@ -75,7 +75,7 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
     for (int box_id : cached_metrics.boxes_used) {
         double util = (double)cached_metrics.box_area_used[box_id] / box_capacity;
         if (util > 1.0) util = 0.0;
-        utilization_score += std::pow(util, 3); // exponential reward
+        utilization_score += std::pow(util , 3); // exponential reward
     }
 
     // Overlap penalty grows exponentially with shrinking T
