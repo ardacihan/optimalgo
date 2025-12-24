@@ -3,80 +3,41 @@
 #include <climits>
 #include <cmath>
 #include <set>
-int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution) {
+double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution) {
     return objective(solution, 1000);
 }
 
-int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
-    const int BOX_PENALTY = 10000000;
-    const double TOUCHING_BONUS = 2.0;
-    const double SURFACE_BONUS = 1.5;
+double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
+    const double BOX_PENALTY = 10000000;
+    const double EDGE_BONUS = 2.0;
 
     if (solution.empty()) return 0;
 
-    long long box_capacity = (long long)L * L;
-
-    // Calculate boxes used and area per box
-    std::set<int> boxes_used;
+    double box_capacity = (double)(L * L);
     std::unordered_map<int, int> box_area_used;
-
-    for (const auto& rect : solution) {
-        boxes_used.insert(rect.box_id);
-        int area = rect.width * rect.height;
-        box_area_used[rect.box_id] += area;
-    }
-
-    // Calculate utilization score
-    double utilization_score = 0.0;
-    for (int box_id : boxes_used) {
-        double util = (double)box_area_used[box_id] / box_capacity;
-        if (util > 1.0) util = 0.0;
-        utilization_score += std::pow(util, 3);
-    }
-
-    // Calculate touching lengths and surface touching
-    int total_touching_length = 0;
-    int total_surface_touching = 0;
-
-    for (size_t i = 0; i < solution.size(); i++) {
-        const auto& r1 = solution[i];
-        int w1 = r1.get_actual_width();
-        int h1 = r1.get_actual_height();
-
-        // Check edges against box boundaries
-        if (r1.x == 0) total_surface_touching += h1;
-        if (r1.y == 0) total_surface_touching += w1;
-        if (r1.x + w1 == L) total_surface_touching += h1;
-        if (r1.y + h1 == L) total_surface_touching += w1;
-
-        // Check against other rectangles in same box
-        for (size_t j = i + 1; j < solution.size(); j++) {
-            const auto& r2 = solution[j];
-            if (r1.box_id != r2.box_id) continue;
-
-            int w2 = r2.get_actual_width();
-            int h2 = r2.get_actual_height();
-
-            // Check horizontal touching (shared vertical edge)
-            if (r1.x + w1 == r2.x || r2.x + w2 == r1.x) {
-                int y_overlap = std::min(r1.y + h1, r2.y + h2) - std::max(r1.y, r2.y);
-                if (y_overlap > 0) {
-                    total_touching_length += y_overlap;
-                }
-            }
-
-            // Check vertical touching (shared horizontal edge)
-            if (r1.y + h1 == r2.y || r2.y + h2 == r1.y) {
-                int x_overlap = std::min(r1.x + w1, r2.x + w2) - std::max(r1.x, r2.x);
-                if (x_overlap > 0) {
-                    total_touching_length += x_overlap;
-                }
-            }
-        }
-    }
-
-    // Calculate overlap area
+    int total_edge_touching = 0;
     int total_overlap_area = 0;
+
+    // Single pass: compute box usage and boundary touching
+    for (const auto& rect : solution) {
+        box_area_used[rect.box_id] += rect.width * rect.height;
+
+        int w = rect.get_actual_width();
+        int h = rect.get_actual_height();
+        if (rect.x == 0) total_edge_touching += h;
+        if (rect.y == 0) total_edge_touching += w;
+        if (rect.x + w == L) total_edge_touching += h;
+        if (rect.y + h == L) total_edge_touching += w;
+    }
+
+    // Utilization score (cubic)
+    double utilization_score = 0.0;
+    for (const auto& [box_id, area] : box_area_used) {
+        double util = std::min(1.0, area / box_capacity);
+        utilization_score += util * util * util;
+    }
+
+    // Pairwise comparisons: touching and overlaps
     for (size_t i = 0; i < solution.size(); i++) {
         const auto& r1 = solution[i];
         int w1 = r1.get_actual_width();
@@ -94,20 +55,21 @@ int RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& so
 
             if (x_overlap > 0 && y_overlap > 0) {
                 total_overlap_area += x_overlap * y_overlap;
+            } else if (x_overlap == 0 && y_overlap > 0) {
+                total_edge_touching += y_overlap;
+            } else if (y_overlap == 0 && x_overlap > 0) {
+                total_edge_touching += x_overlap;
             }
         }
     }
 
-    int num_boxes = boxes_used.size();
-
     double overlap_penalty = total_overlap_area * std::exp(2000.0 / std::max(T, 1)) * 1000;
     double score = utilization_score * 20000 +
-                   total_touching_length * TOUCHING_BONUS +
-                   total_surface_touching * SURFACE_BONUS -
-                   num_boxes * BOX_PENALTY -
+                   total_edge_touching * EDGE_BONUS -
+                   box_area_used.size() * BOX_PENALTY -
                    overlap_penalty;
 
-    return (int)std::clamp(score, (double)INT_MIN/2.0, (double)INT_MAX/2.0);
+    return score;
 }
 
 

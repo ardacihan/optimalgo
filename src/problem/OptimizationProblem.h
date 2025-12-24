@@ -11,7 +11,7 @@ public:
     virtual ~OptimizationProblem() = default;
 
     // Returns the objective value for a given solution (higher is better)
-    virtual int objective(const Solution& solution) = 0;
+    virtual double objective(const Solution& solution) = 0;
 
     // Checks if a solution is legal/feasible
     virtual bool solution_legal(const Solution& solution) const = 0;

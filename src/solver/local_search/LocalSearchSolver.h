@@ -269,66 +269,87 @@ protected:
     }
 
     std::vector<RectanglePlacement> apply_local_search(
-        RectangleFittingProblem &problem,
-        std::vector<RectanglePlacement> initial,
-        int max_non_improving = 5,
-        int T = 1000)
-    {
-        auto current_solution = initial;
-        int current_obj = problem.objective(current_solution, T);
+    RectangleFittingProblem &problem,
+    std::vector<RectanglePlacement> initial,
+    int max_non_improving = 2,
+    int T = 1000)
+{
+    auto current_solution = initial;
+    int current_obj = problem.objective(current_solution, T);
 
-        std::vector<RectanglePlacement> best_sol = current_solution;
-        int best_obj = current_obj;
+    std::vector<RectanglePlacement> best_sol = current_solution;
+    int best_obj = current_obj;
 
-        int non_improving_count = 0;
-        int iteration = 0;
+    int non_improving_count = 0;
+    int iteration = 0;
 
-        double start_temperature = T;
-        double current_temperature = start_temperature;
-        double min_temperature = 0.0;
-        double cooling_rate = 0.94;
+    double start_temperature = T;
+    double current_temperature = start_temperature;
+    double min_temperature = 0.0;
+    double cooling_rate = 0.94;
 
-        while (non_improving_count < max_non_improving) {
-            iteration++;
-            current_temperature = start_temperature * std::pow(cooling_rate, iteration);
-            current_temperature = std::max(min_temperature, current_temperature);
-            int int_temperature = (int)current_temperature;
+    std::cout << "          [LocalSearch] Starting - initial_obj=" << current_obj
+              << ", max_non_improving=" << max_non_improving << std::endl;
 
-            auto neighbors = construct_neighbors(problem, int_temperature);
-            if (neighbors.empty()) break;
+    while (non_improving_count < max_non_improving) {
+        iteration++;
+        current_temperature = start_temperature * std::pow(cooling_rate, iteration);
+        current_temperature = std::max(min_temperature, current_temperature);
+        int int_temperature = (int)current_temperature;
 
-            int best_neighbor_obj = current_obj;
-            std::vector<RectanglePlacement> best_neighbor = current_solution;
-            bool found_better_neighbor = false;
+        auto neighbors = construct_neighbors(problem, int_temperature);
 
-            for (size_t i = 0; i < neighbors.size(); ++i) {
-                int obj = problem.objective(neighbors[i], int_temperature);
-                if (obj > best_neighbor_obj) {
-                    best_neighbor_obj = obj;
-                    best_neighbor = neighbors[i];
-                    found_better_neighbor = true;
-                }
-            }
+        std::cout << "          [LocalSearch] Iter " << iteration
+                  << ": T=" << int_temperature
+                  << ", neighbors=" << neighbors.size()
+                  << ", non_improving=" << non_improving_count << std::endl;
 
-            if (found_better_neighbor) {
-                current_solution = best_neighbor;
-                current_obj = best_neighbor_obj;
+        if (neighbors.empty()) {
+            std::cout << "          [LocalSearch] No neighbors found, stopping" << std::endl;
+            break;
+        }
 
-                if (current_obj > best_obj) {
-                    best_sol = current_solution;
-                    best_obj = current_obj;
-                    non_improving_count = 0;
-                } else {
-                    non_improving_count++;
-                }
-                problem.set_current_solution(current_solution);
-            } else {
-                non_improving_count++;
+        int best_neighbor_obj = current_obj;
+        std::vector<RectanglePlacement> best_neighbor = current_solution;
+        bool found_better_neighbor = false;
+
+        for (size_t i = 0; i < neighbors.size(); ++i) {
+            int obj = problem.objective(neighbors[i], int_temperature);
+            if (obj > best_neighbor_obj) {
+                best_neighbor_obj = obj;
+                best_neighbor = neighbors[i];
+                found_better_neighbor = true;
             }
         }
 
-        return best_sol;
+        if (found_better_neighbor) {
+            current_solution = best_neighbor;
+            current_obj = best_neighbor_obj;
+
+            std::cout << "          [LocalSearch] Found improvement: " << current_obj
+                      << " (+" << (current_obj - best_neighbor_obj + (best_neighbor_obj - problem.objective(best_sol, T))) << ")" << std::endl;
+
+            if (current_obj > best_obj) {
+                best_sol = current_solution;
+                best_obj = current_obj;
+                non_improving_count = 0;
+                std::cout << "          [LocalSearch] NEW BEST: " << best_obj << std::endl;
+            } else {
+                non_improving_count++;
+            }
+            problem.set_current_solution(current_solution);
+        } else {
+            non_improving_count++;
+            std::cout << "          [LocalSearch] No improvement this iteration" << std::endl;
+        }
     }
+
+    std::cout << "          [LocalSearch] Complete - best_obj=" << best_obj
+              << ", iterations=" << iteration
+              << ", improvement=" << (best_obj - problem.objective(initial, T)) << std::endl;
+
+    return best_sol;
+}
 };
 
 #endif

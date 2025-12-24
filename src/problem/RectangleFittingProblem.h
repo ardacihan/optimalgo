@@ -25,8 +25,8 @@ public:
     RectangleFittingProblem(int L, const std::vector<RectanglePlacement>& initial_solution)
         : L(L), current_solution(initial_solution), metrics_valid(false) {}
 
-    int objective(const std::vector<RectanglePlacement>& current_solution) override;
-    int objective(const std::vector<RectanglePlacement>& current_solution, int T);
+    double objective(const std::vector<RectanglePlacement>& current_solution) override;
+    double objective(const std::vector<RectanglePlacement>& current_solution, int T);
 
 
     bool solution_legal(const std::vector<RectanglePlacement>& current_solution) const override;
