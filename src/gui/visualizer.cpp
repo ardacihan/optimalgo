@@ -335,6 +335,7 @@ void RectangleVisualizer::runBenchmarkAsync() {
             Benchmark::runNormal();
         } else {
             Benchmark::runHeavy();
+            Benchmark::runBig();
         }
 
         {

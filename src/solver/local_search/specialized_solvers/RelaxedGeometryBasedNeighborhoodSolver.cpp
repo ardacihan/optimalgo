@@ -15,7 +15,7 @@ RelaxedGeometryBasedNeighborhoodSolver::construct_neighbors(
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 400;
+    const int MAX_NEIGHBORS = 10000;
     std::vector<std::vector<RectanglePlacement>> neighbors;
     neighbors.reserve(MAX_NEIGHBORS);
     if (n == 0) return neighbors;
