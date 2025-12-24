@@ -10,24 +10,10 @@
 #include <unordered_set>
 #include <unordered_map>
 
-// Structure to hold cached metrics for delta calculations
-struct SolutionMetrics {
-    std::unordered_set<int> boxes_used;
-    std::unordered_map<int, long long> box_area_used;
-    long long total_overlap_area;
-    long long total_touching_length;
-    long long total_surface_touching;
-    int last_computed_T;
-
-    SolutionMetrics() : total_overlap_area(0), total_touching_length(0),
-                       total_surface_touching(0), last_computed_T(-1) {}
-};
-
 class RectangleFittingProblem : public OptimizationProblem<std::vector<RectanglePlacement>> {
 private:
     int L;
     std::vector<RectanglePlacement> current_solution;
-    SolutionMetrics cached_metrics;
     bool metrics_valid;
 
     bool check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const;
@@ -42,8 +28,6 @@ public:
     int objective(const std::vector<RectanglePlacement>& current_solution) override;
     int objective(const std::vector<RectanglePlacement>& current_solution, int T);
 
-    int objective_delta(const std::vector<RectanglePlacement>& new_solution,
-                       int changed_rect_idx, int T);
 
     bool solution_legal(const std::vector<RectanglePlacement>& current_solution) const override;
 
@@ -58,7 +42,6 @@ public:
 
     int get_box_length() const { return L; }
 
-    const SolutionMetrics& get_cached_metrics() const { return cached_metrics; }
     void invalidate_metrics() { metrics_valid = false; }
 
     std::unordered_map<int, int> get_coverage_each_bounding_box() const {
