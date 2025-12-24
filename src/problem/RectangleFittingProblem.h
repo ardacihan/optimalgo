@@ -39,8 +39,9 @@ public:
     RectangleFittingProblem(int L, const std::vector<RectanglePlacement>& initial_solution)
         : L(L), current_solution(initial_solution), metrics_valid(false) {}
 
-    int objective(const std::vector<RectanglePlacement>& current_solution) override;
-    int objective(const std::vector<RectanglePlacement>& current_solution, int T);
+    double objective(const std::vector<RectanglePlacement>& current_solution) override;
+
+    double objective(const std::vector<RectanglePlacement>& current_solution, int T);
 
     int objective_delta(const std::vector<RectanglePlacement>& new_solution,
                        int changed_rect_idx, int T);
