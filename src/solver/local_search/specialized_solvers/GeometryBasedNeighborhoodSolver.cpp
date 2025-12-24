@@ -322,119 +322,68 @@ bool GeometryBasedNeighborhoodSolver::try_skyline_placements(
 bool GeometryBasedNeighborhoodSolver::try_greedy_placements(
     std::vector<std::vector<RectanglePlacement>>& neighbors,
     const std::vector<RectanglePlacement>& solution,
-    int rect_idx, int target_box,
+    int rect_idx,
+    int target_box,
     const std::function<bool(int, int, int, bool, int)>& can_place,
     int max_neighbors)
 {
-    const auto& moving_rect = solution[rect_idx];
+    if (neighbors.size() >= max_neighbors)
+        return false;
+
+    const auto& moving = solution[rect_idx];
     int n = solution.size();
 
-    // Collect all rectangles in target box
-    std::vector<int> target_rect_indices;
-    for (int i = 0; i < n; i++) {
-        if (solution[i].box_id == target_box) {
-            target_rect_indices.push_back(i);
-        }
+    // 1. Collect candidate X/Y coordinates (implicit grid splits)
+    std::vector<int> candidate_x;
+    std::vector<int> candidate_y;
+
+    candidate_x.reserve(n + 1);
+    candidate_y.reserve(n + 1);
+
+    candidate_x.push_back(0);
+    candidate_y.push_back(0);
+
+    for (const auto& r : solution) {
+        if (r.box_id != target_box) continue;
+        candidate_x.push_back(r.x + r.get_actual_width());
+        candidate_y.push_back(r.y + r.get_actual_height());
     }
 
-    // Try both orientations
-    std::vector<bool> orientations = {moving_rect.rotated};
-    if (moving_rect.width != moving_rect.height) {
-        orientations.push_back(!moving_rect.rotated);
-    }
+    std::sort(candidate_x.begin(), candidate_x.end());
+    candidate_x.erase(std::unique(candidate_x.begin(), candidate_x.end()), candidate_x.end());
 
-    for (bool rotated : orientations) {
-        if (neighbors.size() >= max_neighbors) break;
+    std::sort(candidate_y.begin(), candidate_y.end());
+    candidate_y.erase(std::unique(candidate_y.begin(), candidate_y.end()), candidate_y.end());
 
-        int w = rotated ? moving_rect.height : moving_rect.width;
-        int h = rotated ? moving_rect.width : moving_rect.height;
+    // 2. Orientation loop (greedy)
+    bool try_rotated[2] = { false, true };
 
-        // Strategy 1: Try corner positions (greedy-style)
-        std::vector<std::pair<int, int>> corner_positions = {
-            {0, 0},  // Top-left corner
-        };
+    for (bool rotated : try_rotated) {
+        if (rotated && moving.width == moving.height)
+            continue;
 
-        for (const auto& [x, y] : corner_positions) {
-            if (neighbors.size() >= max_neighbors) break;
-            if (can_place(rect_idx, x, y, rotated, target_box)) {
-                auto neighbor = solution;
-                neighbor[rect_idx].box_id = target_box;
-                neighbor[rect_idx].x = x;
-                neighbor[rect_idx].y = y;
-                neighbor[rect_idx].rotated = rotated;
-                neighbors.push_back(neighbor);
-                return true;  // Found a placement
-            }
-        }
+        if (neighbors.size() >= max_neighbors)
+            return true;
 
-        // Strategy 2: Try bottom-left style positions (scan from left to right, bottom to top)
-        std::vector<std::pair<int, int>> bl_positions;
-
-        // Build a set of candidate positions based on existing rectangles
-        for (int idx : target_rect_indices) {
-            const auto& anchor = solution[idx];
-            int aw = anchor.get_actual_width();
-            int ah = anchor.get_actual_height();
-
-            // Positions that align with existing rectangles (greedy-style)
-            bl_positions.push_back({anchor.x + aw, anchor.y});  // Right of anchor
-            bl_positions.push_back({anchor.x, anchor.y + ah});  // Above anchor
-            bl_positions.push_back({0, anchor.y + ah});         // Left edge, above anchor
-            bl_positions.push_back({anchor.x + aw, 0});         // Bottom edge, right of anchor
-        }
-
-        // Sort positions by bottom-left preference: prioritize lower y, then lower x
-        std::sort(bl_positions.begin(), bl_positions.end(),
-                 [](const auto& a, const auto& b) {
-                     if (a.second != b.second) return a.second < b.second;
-                     return a.first < b.first;
-                 });
-
-        // Try positions in order
-        for (const auto& [x, y] : bl_positions) {
-            if (neighbors.size() >= max_neighbors) break;
-            if (can_place(rect_idx, x, y, rotated, target_box)) {
-                auto neighbor = solution;
-                neighbor[rect_idx].box_id = target_box;
-                neighbor[rect_idx].x = x;
-                neighbor[rect_idx].y = y;
-                neighbor[rect_idx].rotated = rotated;
-                neighbors.push_back(neighbor);
-                return true;  // Found a placement
-            }
-        }
-
-        // Strategy 3: Try all 4 sides of each existing rectangle (more exhaustive)
-        for (int idx : target_rect_indices) {
-            if (neighbors.size() >= max_neighbors) break;
-
-            const auto& anchor = solution[idx];
-            int aw = anchor.get_actual_width();
-            int ah = anchor.get_actual_height();
-
-            std::vector<std::pair<int, int>> adjacent_positions = {
-                {anchor.x - w, anchor.y},      // Left
-                {anchor.x + aw, anchor.y},     // Right
-                {anchor.x, anchor.y - h},      // Below
-                {anchor.x, anchor.y + ah}      // Above
-            };
-
-            for (const auto& [x, y] : adjacent_positions) {
+        // 3. Bottom-left greedy placement at meaningful anchors
+        for (int y : candidate_y) {
+            for (int x : candidate_x) {
                 if (can_place(rect_idx, x, y, rotated, target_box)) {
                     auto neighbor = solution;
                     neighbor[rect_idx].box_id = target_box;
                     neighbor[rect_idx].x = x;
                     neighbor[rect_idx].y = y;
                     neighbor[rect_idx].rotated = rotated;
-                    neighbors.push_back(neighbor);
-                    return true;  // Found a placement
+                    neighbors.push_back(std::move(neighbor));
+                    return true;
                 }
             }
         }
     }
 
-    return false;  // No valid placement found
+    return false;
 }
+
 
 void GeometryBasedNeighborhoodSolver::generate_shift_neighbors(
     std::vector<std::vector<RectanglePlacement>>& neighbors,
