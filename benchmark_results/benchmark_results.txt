@@ -1,0 +1,24 @@
+RECTANGLE PACKING – LIGHT BENCHMARK
+===================================
+Rectangles=1000 BoxSize=80 W=[5,20] H=[5,20]
+
+GeometryBased | time=8.79618s | objective=-258196625 | boxes=30
+Occupancy: 100-95 : 4 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 16 ; <80 : 10
+
+RuleBased | time=11.3246s | objective=-1247653072 | boxes=22
+Occupancy: 100-95 : 11 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 10 ; <80 : 1
+
+RelaxedGeometry | time=24.9048s | objective=-247568004 | boxes=29
+Occupancy: 100-95 : 5 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 15 ; <80 : 9
+
+GreedyBiggestFirst | time=0.538949s | objective=-214144013 | boxes=26
+Occupancy: 100-95 : 11 ; 85-80 : 0 ; 89-85 : 2 ; 94-90 : 12 ; <80 : 1
+
+GreedySmallestFirst | time=0.314704s | objective=-260075247 | boxes=30
+Occupancy: 100-95 : 0 ; 85-80 : 10 ; 89-85 : 11 ; 94-90 : 1 ; <80 : 8
+
+GreedyBestFit | time=6.09145s | objective=-214205727 | boxes=26
+Occupancy: 100-95 : 9 ; 85-80 : 0 ; 89-85 : 2 ; 94-90 : 14 ; <80 : 1
+
+
+Benchmark complete.

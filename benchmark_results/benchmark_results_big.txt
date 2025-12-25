@@ -1,0 +1,101 @@
+RECTANGLE PACKING – HEAVY BENCHMARK
+====================================
+
+CONFIG: Big
+Rectangles=10000 BoxSize=100 W=[5,20] H=[5,20]
+Parameters: NUM_RERUNS=0 MAX_SUBPROBLEM=200 T=1000
+
+GeometryBased | time=669.102s | objective=-1517265945 | boxes=179
+Occupancy: 100-95 : 0 ; 85-80 : 26 ; 89-85 : 129 ; 94-90 : 23 ; <80 : 1
+
+RuleBased | time=696.211s | objective=-2147483648 | boxes=132
+Occupancy: 100-95 : 23 ; 85-80 : 0 ; 89-85 : 3 ; 94-90 : 105 ; <80 : 1
+
+RelaxedGeometry | time=1140.75s | objective=-1516723195 | boxes=179
+Occupancy: 100-95 : 2 ; 85-80 : 31 ; 89-85 : 121 ; 94-90 : 23 ; <80 : 2
+
+GreedyBiggestFirst | time=51.9969s | objective=-1329740172 | boxes=163
+Occupancy: 100-95 : 118 ; 85-80 : 0 ; 89-85 : 4 ; 94-90 : 40 ; <80 : 1
+
+GreedySmallestFirst | time=30.8338s | objective=-1539924821 | boxes=181
+Occupancy: 100-95 : 4 ; 85-80 : 39 ; 89-85 : 93 ; 94-90 : 27 ; <80 : 18
+
+GreedyBestFit | time=232.812s | objective=-1341597791 | boxes=164
+Occupancy: 100-95 : 107 ; 85-80 : 0 ; 89-85 : 1 ; 94-90 : 55 ; <80 : 1
+
+========================================
+
+CONFIG: SmallerSubproblem
+Rectangles=10000 BoxSize=100 W=[20,50] H=[5,10]
+Parameters: NUM_RERUNS=0 MAX_SUBPROBLEM=100 T=1000
+
+GeometryBased | time=252.677s | objective=-2147483648 | boxes=298
+Occupancy: 100-95 : 1 ; 85-80 : 41 ; 89-85 : 158 ; 94-90 : 97 ; <80 : 1
+
+RuleBased | time=585.304s | objective=-2147483648 | boxes=125
+Occupancy: 100-95 : 50 ; 85-80 : 5 ; 89-85 : 3 ; 94-90 : 31 ; <80 : 36
+
+RelaxedGeometry | time=375.348s | objective=-2147483648 | boxes=298
+Occupancy: 100-95 : 1 ; 85-80 : 41 ; 89-85 : 157 ; 94-90 : 98 ; <80 : 1
+
+GreedyBiggestFirst | time=70.8428s | objective=-2147483648 | boxes=289
+Occupancy: 100-95 : 69 ; 85-80 : 37 ; 89-85 : 81 ; 94-90 : 98 ; <80 : 4
+
+GreedySmallestFirst | time=49.7184s | objective=-2147483648 | boxes=311
+Occupancy: 100-95 : 28 ; 85-80 : 90 ; 89-85 : 68 ; 94-90 : 48 ; <80 : 77
+
+GreedyBestFit | time=288.376s | objective=-2147483648 | boxes=282
+Occupancy: 100-95 : 95 ; 85-80 : 0 ; 89-85 : 41 ; 94-90 : 145 ; <80 : 1
+
+========================================
+
+CONFIG: BiggerBox
+Rectangles=5000 BoxSize=200 W=[20,50] H=[5,10]
+Parameters: NUM_RERUNS=0 MAX_SUBPROBLEM=100 T=1000
+
+GeometryBased | time=137.8s | objective=-466914603 | boxes=51
+Occupancy: 100-95 : 0 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 0 ; <80 : 51
+
+RuleBased | time=2164.31s | objective=-456832290 | boxes=50
+Occupancy: 100-95 : 0 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 0 ; <80 : 50
+
+RelaxedGeometry | time=1006.78s | objective=-466905995 | boxes=51
+Occupancy: 100-95 : 0 ; 85-80 : 0 ; 89-85 : 0 ; 94-90 : 0 ; <80 : 51
+
+GreedyBiggestFirst | time=23.9843s | objective=-288493584 | boxes=35
+Occupancy: 100-95 : 11 ; 85-80 : 0 ; 89-85 : 3 ; 94-90 : 21 ; <80 : 0
+
+GreedySmallestFirst | time=17.7615s | objective=-311815153 | boxes=37
+Occupancy: 100-95 : 0 ; 85-80 : 4 ; 89-85 : 22 ; 94-90 : 11 ; <80 : 0
+
+GreedyBestFit | time=373.718s | objective=-288472201 | boxes=35
+Occupancy: 100-95 : 11 ; 85-80 : 0 ; 89-85 : 2 ; 94-90 : 21 ; <80 : 1
+
+========================================
+
+CONFIG: BiggerRect
+Rectangles=5000 BoxSize=200 W=[20,50] H=[20,100]
+Parameters: NUM_RERUNS=0 MAX_SUBPROBLEM=100 T=1000
+
+GeometryBased | time=232.925s | objective=-2147483648 | boxes=293
+Occupancy: 100-95 : 12 ; 85-80 : 33 ; 89-85 : 147 ; 94-90 : 100 ; <80 : 1
+
+RuleBased | time=1575.04s | objective=-2147483648 | boxes=126
+Occupancy: 100-95 : 25 ; 85-80 : 5 ; 89-85 : 17 ; 94-90 : 60 ; <80 : 19
+
+RelaxedGeometry | time=287.709s | objective=-2147483648 | boxes=296
+Occupancy: 100-95 : 5 ; 85-80 : 52 ; 89-85 : 136 ; 94-90 : 102 ; <80 : 1
+
+GreedyBiggestFirst | time=160.777s | objective=-2147483648 | boxes=282
+Occupancy: 100-95 : 86 ; 85-80 : 4 ; 89-85 : 64 ; 94-90 : 127 ; <80 : 1
+
+GreedySmallestFirst | time=119.68s | objective=-2147483648 | boxes=331
+Occupancy: 100-95 : 2 ; 85-80 : 111 ; 89-85 : 38 ; 94-90 : 6 ; <80 : 174
+
+GreedyBestFit | time=1588.32s | objective=-2147483648 | boxes=287
+Occupancy: 100-95 : 49 ; 85-80 : 14 ; 89-85 : 96 ; 94-90 : 126 ; <80 : 2
+
+========================================
+
+
+All benchmarks completed.
