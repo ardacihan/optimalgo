@@ -119,8 +119,8 @@ RuleBasedNeighborhoodSolver::construct_neighbors(
     int n = solution.size();
     int L = problem.get_box_length();
 
-    const int MAX_NEIGHBORS = 50;
-    const int MAX_SWAPS = 50;
+    const int MAX_NEIGHBORS = 200;
+    const int MAX_SWAPS = 200;
 
     if (n < 2) return {};
 

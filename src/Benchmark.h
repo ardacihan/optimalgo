@@ -5,7 +5,6 @@ class Benchmark {
 public:
     static void runNormal();
     static void runHeavy();
-    static void runBig();
 };
 #include "Benchmark.h"
 
