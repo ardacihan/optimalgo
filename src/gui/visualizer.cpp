@@ -427,71 +427,136 @@ void RectangleVisualizer::render() {
     std::sort(non_empty_boxes.begin(), non_empty_boxes.end());
 
     std::vector<int> boxes_to_display;
-    if (gui_config.view_all_boxes) {
-        boxes_to_display = non_empty_boxes;
-    } else {
+    if (gui_config.box_view_mode == VIEW_SINGLE) {
         if (!non_empty_boxes.empty()) {
-            // Use index-based selection
-            if (gui_config.current_box_view >= non_empty_boxes.size()) {
+            if (gui_config.current_box_view >= non_empty_boxes.size())
                 gui_config.current_box_view = 0;
-            }
 
-            // If we have a target box ID from solve_one_step, find its index
             if (gui_config.target_box_id != -1) {
                 auto it = std::find(non_empty_boxes.begin(), non_empty_boxes.end(), gui_config.target_box_id);
                 if (it != non_empty_boxes.end()) {
                     gui_config.current_box_view = std::distance(non_empty_boxes.begin(), it);
                 }
-                gui_config.target_box_id = -1; // Reset after using
+                gui_config.target_box_id = -1;
             }
 
             boxes_to_display.push_back(non_empty_boxes[gui_config.current_box_view]);
         }
+    } else {
+        boxes_to_display = non_empty_boxes;
     }
 
     float box_spacing = 20.0f;
     int boxes_count = boxes_to_display.size();
-    float total_width = boxes_count * (box_length * scale_factor) + (boxes_count - 1) * box_spacing;
+
+    int cols = 1;
+    int rows = 1;
+    float local_scale = scale_factor;
+
+    if (gui_config.box_view_mode == VIEW_ALL_HORIZONTAL) {
+        cols = boxes_count;
+        rows = 1;
+    } else if (gui_config.box_view_mode == VIEW_ALL_FIT_SCREEN && boxes_count > 0) {
+        cols = (int)std::ceil(std::sqrt((float)boxes_count));
+        rows = (int)std::ceil((float)boxes_count / cols);
+
+        float screen_ratio = (float)display_w / display_h;
+        if (screen_ratio > 1.5f) {
+            cols = std::min(boxes_count, 8);
+            rows = (int)std::ceil((float)boxes_count / cols);
+        }
+    }
+
+    float cell_width = box_length * local_scale;
+    float cell_height = box_length * local_scale;
+
+    if (gui_config.box_view_mode == VIEW_ALL_FIT_SCREEN && boxes_count > 0) {
+        float avail_w = display_w - 450.0f;
+        float avail_h = display_h - 150.0f;
+
+        float max_cell_w = (avail_w - (cols - 1) * box_spacing) / cols;
+        float max_cell_h = (avail_h - (rows - 1) * box_spacing) / rows;
+
+        local_scale = std::min(max_cell_w / box_length, max_cell_h / box_length);
+        local_scale = std::min(local_scale, scale_factor);
+        local_scale = std::max(local_scale, 2.0f);
+
+        cell_width = box_length * local_scale;
+        cell_height = box_length * local_scale;
+    }
+
+    float total_width = cols * cell_width + (cols - 1) * box_spacing;
+    float total_height = rows * cell_height + (rows - 1) * box_spacing;
     float start_x = (display_w - total_width) / 2.0f;
+    float start_y = (display_h - total_height) / 2.0f;
 
     for (int display_index = 0; display_index < boxes_count; ++display_index) {
         int box_id = boxes_to_display[display_index];
-        float box_x = start_x + display_index * (box_length * scale_factor + box_spacing);
-        float box_y = offset.y;
-        float box_size = box_length * scale_factor;
 
-        draw_list->AddRectFilled(ImVec2(box_x, box_y), ImVec2(box_x + box_size, box_y + box_size), IM_COL32(40,40,40,255));
-        draw_list->AddRect(ImVec2(box_x, box_y), ImVec2(box_x + box_size, box_y + box_size), IM_COL32(255,255,255,255), 0.0f, 0, 2.0f);
+        int row, col;
+        if (gui_config.box_view_mode == VIEW_ALL_HORIZONTAL) {
+            row = 0;
+            col = display_index;
+        } else if (gui_config.box_view_mode == VIEW_SINGLE) {
+            row = 0;
+            col = 0;
+        } else {
+            row = display_index / cols;
+            col = display_index % cols;
+        }
+
+        float box_x = start_x + col * (cell_width + box_spacing);
+        float box_y = start_y + row * (cell_height + box_spacing);
+
+        draw_list->AddRectFilled(ImVec2(box_x, box_y), ImVec2(box_x + cell_width, box_y + cell_height), IM_COL32(40,40,40,255));
+        draw_list->AddRect(ImVec2(box_x, box_y), ImVec2(box_x + cell_width, box_y + cell_height), IM_COL32(255,255,255,255), 0.0f, 0, 2.0f);
 
         std::string box_label = "Box " + std::to_string(box_id+1);
-        if (!gui_config.view_all_boxes) box_label += " (Viewing)";
         draw_list->AddText(ImVec2(box_x + 5, box_y + 5), IM_COL32(255,255,255,255), box_label.c_str());
     }
 
     for (size_t idx = 0; idx < display_placements.size(); idx++) {
         const auto& placement = display_placements[idx];
-        if (!gui_config.view_all_boxes) {
-            int current_box = boxes_to_display.empty() ? -1 : boxes_to_display[0];
-            if (placement.box_id != current_box) continue;
+
+        if (gui_config.box_view_mode == VIEW_SINGLE && !boxes_to_display.empty()) {
+            if (placement.box_id != boxes_to_display[0]) continue;
         }
 
         int display_index = -1;
-        for (int i=0;i<boxes_to_display.size();++i) if (boxes_to_display[i]==placement.box_id) display_index=i;
-        if (display_index==-1) continue;
+        for (int i = 0; i < boxes_to_display.size(); ++i) {
+            if (boxes_to_display[i] == placement.box_id) {
+                display_index = i;
+                break;
+            }
+        }
+        if (display_index == -1) continue;
 
-        float box_x = start_x + display_index * (box_length * scale_factor + box_spacing);
+        int row, col;
+        if (gui_config.box_view_mode == VIEW_ALL_HORIZONTAL) {
+            row = 0;
+            col = display_index;
+        } else if (gui_config.box_view_mode == VIEW_SINGLE) {
+            row = 0;
+            col = 0;
+        } else {
+            row = display_index / cols;
+            col = display_index % cols;
+        }
 
-        float rect_w = placement.get_actual_width() * scale_factor;
-        float rect_h = placement.get_actual_height() * scale_factor;
-        float rect_x = box_x + placement.x * scale_factor;
-        float rect_y = offset.y + placement.y * scale_factor;
+        float box_x = start_x + col * (cell_width + box_spacing);
+        float box_y = start_y + row * (cell_height + box_spacing);
+
+        float rect_w = placement.get_actual_width() * local_scale;
+        float rect_h = placement.get_actual_height() * local_scale;
+        float rect_x = box_x + placement.x * local_scale;
+        float rect_y = box_y + placement.y * local_scale;
 
         ImU32 color = IM_COL32(128, 128, 128, 150);
 
         if ((int)idx == g_changed_rect_idx) {
             color = g_objective_improved
-                ? IM_COL32(255, 255, 0, 200)   // Yellow fill if improved
-                : IM_COL32(0, 0, 255, 200);    // Blue fill if worse
+                ? IM_COL32(255, 255, 0, 200)
+                : IM_COL32(0, 0, 255, 200);
         }
 
         draw_list->AddRectFilled(ImVec2(rect_x, rect_y), ImVec2(rect_x + rect_w, rect_y + rect_h), color);
@@ -510,195 +575,228 @@ void RectangleVisualizer::render() {
         }
     }
 
-    ImGui::SetNextWindowPos(ImVec2(20,20), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(400,600), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Rectangle Packing Controls");
+    // Left Window: Problem Configuration
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(430, display_h / 2 + 25), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Problem Configuration", nullptr, ImGuiWindowFlags_NoSavedSettings);
 
-    ImGui::Text("Instance Generator Parameters");
-    ImGui::Separator();
-    ImGui::SliderInt("Rectangle Count",&gui_config.rect_count,10,1000);
-    ImGui::SliderInt("Box Size (L)",&gui_config.box_size,10,80);
-    if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
-    ImGui::SliderInt("Min Width",&gui_config.min_width,5,box_length);
-    ImGui::SliderInt("Max Width",&gui_config.max_width,std::min(20,box_length),box_length);
-    ImGui::SliderInt("Min Height",&gui_config.min_height,5,box_length);
-    ImGui::SliderInt("Max Height",&gui_config.max_height,std::min(10,box_length),box_length);
-    if (ImGui::Button("Generate new problem")) generateRandomProblem();
-    ImGui::Separator();
-    ImGui::Text("Box Viewing:");
-    ImGui::Checkbox("View All Boxes",&gui_config.view_all_boxes);
-    if (!gui_config.view_all_boxes && non_empty_boxes.size()>0) {
-        // Use index-based slider (0 to num_boxes-1)
-        int max_index = (int)non_empty_boxes.size() - 1;
-        if (gui_config.current_box_view > max_index) {
-            gui_config.current_box_view = 0;
+    if (ImGui::CollapsingHeader("Instance Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SliderInt("Rectangle Count", &gui_config.rect_count, 10, 1000);
+        ImGui::SliderInt("Box Size (L)", &gui_config.box_size, 10, 80);
+        if (ImGui::IsItemDeactivatedAfterEdit()) updateMaxSizeLimits();
+        ImGui::SliderInt("Min Width", &gui_config.min_width, 5, box_length);
+        ImGui::SliderInt("Max Width", &gui_config.max_width, std::min(20,box_length), box_length);
+        ImGui::SliderInt("Min Height", &gui_config.min_height, 5, box_length);
+        ImGui::SliderInt("Max Height", &gui_config.max_height, std::min(10,box_length), box_length);
+
+        ImGui::Spacing();
+        if (ImGui::Button("Generate New Problem", ImVec2(-1, 0))) {
+            generateRandomProblem();
         }
-
-        ImGui::SliderInt("Box Index", &gui_config.current_box_view, 0, max_index);
-
-        // Show the actual box ID for clarity
-        int actual_box_id = non_empty_boxes[gui_config.current_box_view];
-        ImGui::Text("Viewing Box %d (ID: %d)", gui_config.current_box_view + 1, actual_box_id);
-    } else if (!gui_config.view_all_boxes && non_empty_boxes.empty()) {
-        ImGui::Text("No boxes with rectangles to display");
-    }
-
-    ImGui::Separator();
-    ImGui::Text("Solver Configuration:");
-
-    const char* solver_types[] = { "Local Search", "Greedy" };
-    ImGui::Combo("Solver Type", &gui_config.solver_type, solver_types, IM_ARRAYSIZE(solver_types));
-
-    if (gui_config.solver_type == 0) {
-        const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
-        ImGui::Combo("Local Search Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
-        ImGui::BeginDisabled(is_solving || is_benchmarking);
-        if (ImGui::Button("Solve One Step")) {
-            solveNextStep();
-        }
-        ImGui::EndDisabled();
-    } else {
-        const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
-        ImGui::Combo("Greedy Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));
-    }
-
-    ImGui::Separator();
-
-    ImGui::BeginDisabled(is_solving || is_benchmarking);
-    if (ImGui::Button("Run Solver")) {
-        gui_config.T = 1000;
-        runSolver();
-    }
-
-    ImGui::SameLine();
-    if (ImGui::Button("Revert")) revertToOriginal();
-    ImGui::EndDisabled();
-
-    if (is_solving && !is_benchmarking) {
         ImGui::Separator();
-
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - solver_start_time);
-
-        std::ostringstream time_ss;
-        time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
-                << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
-
-        int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
-        std::string calculating_text = "Calculating";
-        for (int i = 0; i < dot_count; i++) {
-            calculating_text += ".";
-        }
-
-        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", calculating_text.c_str());
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
     }
 
-    ImGui::Separator();
-    ImGui::Text("Statistics:");
-    ImGui::Text("Rectangles: %zu", display_placements.size());
-    ImGui::Text("Boxes Used: %zu", non_empty_boxes.size());
+    if (ImGui::CollapsingHeader("Solver Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Solver Type:");
+        const char* solver_types[] = { "Local Search", "Greedy" };
+        ImGui::Combo("Solver Type", &gui_config.solver_type, solver_types, IM_ARRAYSIZE(solver_types));
 
-    if (!display_placements.empty()) {
-        float total_area=0, used_area=0;
-        if (gui_config.view_all_boxes) {
-            total_area = non_empty_boxes.size()*box_length*box_length;
-            for (auto& r:display_placements) used_area += r.width*r.height;
+        if (gui_config.solver_type == 0) {
+            ImGui::Text("Local Search Strategy:");
+            const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
+            ImGui::Combo("Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
+
+            ImGui::Spacing();
+            ImGui::BeginDisabled(is_solving || is_benchmarking);
+            if (ImGui::Button("Solve One Step", ImVec2(-1, 0))) {
+                solveNextStep();
+            }
+            ImGui::EndDisabled();
+            ImGui::Spacing();
         } else {
-            if (!boxes_to_display.empty()) {
-                total_area = box_length*box_length;
-                for (auto& r:display_placements) if (r.box_id==boxes_to_display[0]) used_area+=r.width*r.height;
-            }
-        }
-        if (total_area>0) {
-            float utilization = (used_area/total_area)*100.0f;
-            ImGui::Text("Utilization: %.1f%%", utilization);
-        }
-    }
-
-    ImGui::Separator();
-
-    // Benchmark section
-    ImGui::Text("Benchmark Configuration:");
-    static bool benchmark_fast_mode = true;
-    ImGui::Checkbox("Fast Benchmark Mode", &benchmark_fast_mode);
-    gui_config.benchmark_fast = benchmark_fast_mode;
-
-    ImGui::BeginDisabled(is_benchmarking || is_solving);
-    if (ImGui::Button("Run Benchmark")) {
-        runBenchmarkAsync();
-    }
-    ImGui::EndDisabled();
-
-    if (is_benchmarking) {
-        ImGui::Separator();
-
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - benchmark_start_time);
-
-        std::ostringstream time_ss;
-        time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
-                << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
-
-        int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
-        std::string benchmark_text = "Benchmarking";
-        for (int i = 0; i < dot_count; i++) {
-            benchmark_text += ".";
+            ImGui::Text("Greedy Strategy:");
+            const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
+            ImGui::Combo("Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));
+            ImGui::Spacing();
         }
 
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s", benchmark_text.c_str());
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
+        ImGui::SliderInt("Temperature (T)", &gui_config.T, 1, 10000);
+        ImGui::SliderInt("Reruns", &gui_config.num_reruns, 1, 10);
+        ImGui::SliderInt("Max Subproblem", &gui_config.max_rectangle_in_subproblem, 10, 200);
 
-        // Show status message
-        std::lock_guard<std::mutex> lock(benchmark_mutex);
-        ImGui::Text("Status: %s", benchmark_status.c_str());
-    }
-    ImGui::Separator();
+        ImGui::Spacing();
 
-    // Load Benchmark Solution section
-    ImGui::Text("Load Benchmark Solution:");
+        if (is_solving && !is_benchmarking) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - solver_start_time);
 
-    if (ImGui::Button("Refresh File List")) {
-        refreshBenchmarkFiles();
-    }
+            std::ostringstream time_ss;
+            time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
+                    << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
 
-    if (available_benchmark_files.empty()) {
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No benchmark XML files found");
-    } else {
-        ImGui::Text("Available files: %zu", available_benchmark_files.size());
-
-        // File selection listbox
-        ImGui::BeginChild("FileList", ImVec2(0, 150), true);
-        for (int i = 0; i < (int)available_benchmark_files.size(); i++) {
-            bool is_selected = (selected_file_index == i);
-            if (ImGui::Selectable(available_benchmark_files[i].c_str(), is_selected)) {
-                selected_file_index = i;
+            int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
+            std::string calculating_text = "Calculating";
+            for (int i = 0; i < dot_count; i++) {
+                calculating_text += ".";
             }
-            if (is_selected) {
-                ImGui::SetItemDefaultFocus();
-            }
+
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", calculating_text.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
+            ImGui::Spacing();
         }
-        ImGui::EndChild();
 
-        ImGui::BeginDisabled(selected_file_index < 0 || is_solving || is_benchmarking);
-        if (ImGui::Button("Load Selected Benchmark")) {
-            if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
-                loadBenchmarkSolution(available_benchmark_files[selected_file_index]);
-            }
+        ImGui::BeginDisabled(is_solving || is_benchmarking);
+        if (ImGui::Button("Run Solver", ImVec2(-1, 45))) {
+            gui_config.T = 1000;
+            runSolver();
         }
         ImGui::EndDisabled();
 
-        if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
-            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
-                               "Selected: %s", available_benchmark_files[selected_file_index].c_str());
+        ImGui::Spacing();
+
+        ImGui::BeginDisabled(is_solving || is_benchmarking);
+        if (ImGui::Button("Revert to Original", ImVec2(-1, 45))) {
+            revertToOriginal();
         }
+        ImGui::EndDisabled();
+        ImGui::Separator();
     }
-
-
 
     ImGui::End();
+
+    // Right Window: Visualization & Results
+    ImGui::SetNextWindowPos(ImVec2(display_w - 440, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(430, display_h / 2 - 20), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Visualization & Results", nullptr, ImGuiWindowFlags_NoSavedSettings);
+
+    if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Box Viewing:");
+        const char* view_modes[] = {
+            "Single Box",
+            "All Boxes (Horizontal)",
+            "All Boxes (Fit Screen)"
+        };
+
+        ImGui::Combo("Box View Mode", &gui_config.box_view_mode, view_modes, IM_ARRAYSIZE(view_modes));
+
+        if (gui_config.box_view_mode == VIEW_SINGLE && !non_empty_boxes.empty()) {
+            int max_index = (int)non_empty_boxes.size() - 1;
+            if (gui_config.current_box_view > max_index) {
+                gui_config.current_box_view = 0;
+            }
+
+            ImGui::SliderInt("Box Index", &gui_config.current_box_view, 0, max_index);
+
+            int actual_box_id = non_empty_boxes[gui_config.current_box_view];
+            ImGui::Text("Viewing Box %d (ID: %d)", gui_config.current_box_view + 1, actual_box_id);
+        } else if (gui_config.box_view_mode == VIEW_SINGLE && non_empty_boxes.empty()) {
+            ImGui::Text("No boxes with rectangles to display");
+        }
+        ImGui::Spacing();
+        ImGui::Separator();
+    }
+
+    if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Rectangles: %zu", display_placements.size());
+        ImGui::Text("Boxes Used: %zu", non_empty_boxes.size());
+
+        if (!display_placements.empty()) {
+            float total_area=0, used_area=0;
+            if (gui_config.box_view_mode != VIEW_SINGLE) {
+                total_area = non_empty_boxes.size()*box_length*box_length;
+                for (auto& r:display_placements) used_area += r.width*r.height;
+            } else {
+                if (!boxes_to_display.empty()) {
+                    total_area = box_length*box_length;
+                    for (auto& r:display_placements) if (r.box_id==boxes_to_display[0]) used_area+=r.width*r.height;
+                }
+            }
+            if (total_area>0) {
+                float utilization = (used_area/total_area)*100.0f;
+                ImGui::Text("Utilization: %.1f%%", utilization);
+            }
+        }
+        ImGui::Spacing();
+        ImGui::Separator();
+    }
+
+    if (ImGui::CollapsingHeader("Benchmark", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Configuration:");
+        static bool benchmark_fast_mode = true;
+        ImGui::Checkbox("Fast Benchmark Mode", &benchmark_fast_mode);
+        gui_config.benchmark_fast = benchmark_fast_mode;
+
+        ImGui::BeginDisabled(is_benchmarking || is_solving);
+        if (ImGui::Button("Run Benchmark", ImVec2(-1, 0))) {
+            runBenchmarkAsync();
+        }
+        ImGui::EndDisabled();
+
+        if (is_benchmarking) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - benchmark_start_time);
+
+            std::ostringstream time_ss;
+            time_ss << std::setw(2) << std::setfill('0') << (elapsed.count() / 60) << ":"
+                    << std::setw(2) << std::setfill('0') << (elapsed.count() % 60);
+
+            int dot_count = (int)(ImGui::GetTime() * 2.0) % 4;
+            std::string benchmark_text = "Benchmarking";
+            for (int i = 0; i < dot_count; i++) {
+                benchmark_text += ".";
+            }
+
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s", benchmark_text.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(%s)", time_ss.str().c_str());
+
+            std::lock_guard<std::mutex> lock(benchmark_mutex);
+            ImGui::Text("Status: %s", benchmark_status.c_str());
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        ImGui::Text("Load Solution:");
+        if (ImGui::Button("Refresh File List", ImVec2(-1, 0))) {
+            refreshBenchmarkFiles();
+        }
+
+        if (available_benchmark_files.empty()) {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No benchmark XML files found");
+        } else {
+            ImGui::Text("Available files: %zu", available_benchmark_files.size());
+
+            ImGui::BeginChild("FileList", ImVec2(0, 120), true);
+            for (int i = 0; i < (int)available_benchmark_files.size(); i++) {
+                bool is_selected = (selected_file_index == i);
+                if (ImGui::Selectable(available_benchmark_files[i].c_str(), is_selected)) {
+                    selected_file_index = i;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndChild();
+
+            ImGui::BeginDisabled(selected_file_index < 0 || is_solving || is_benchmarking);
+            if (ImGui::Button("Load Selected Solution", ImVec2(-1, 0))) {
+                if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
+                    loadBenchmarkSolution(available_benchmark_files[selected_file_index]);
+                }
+            }
+            ImGui::EndDisabled();
+
+            if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
+                ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
+                                "Selected: %s", available_benchmark_files[selected_file_index].c_str());
+            }
+        }
+    }
+
+    ImGui::End();
+
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(static_cast<GLFWwindow*>(window));

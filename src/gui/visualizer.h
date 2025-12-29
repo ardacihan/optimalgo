@@ -18,6 +18,12 @@
 #include "../solver/local_search/specialized_solvers/RelaxedGeometryBasedNeighborhoodSolver.h"
 #include "../solver/greedy/GreedySolver.h"
 
+enum BoxViewMode {
+    VIEW_SINGLE = 0,
+    VIEW_ALL_HORIZONTAL = 1,
+    VIEW_ALL_FIT_SCREEN = 2
+};
+
 struct GUIConfig {
     int rect_count = 1000;
     int box_size = 80;
@@ -34,14 +40,11 @@ struct GUIConfig {
     int target_box_id = -1;
     int benchmark_fast = true;
 
-    // Solver type selection
-    int solver_type = 0; // 0 = Local Search, 1 = Greedy
+    int solver_type = 0;
+    int local_search_strategy = 0;
+    int greedy_strategy = 0;
 
-    // Local search strategy selection
-    int local_search_strategy = 0; // 0 = Geometry Based, 1 = Permutation Based, 2 = Relaxed Geometry Based
-
-    // Greedy strategy selection
-    int greedy_strategy = 0; // 0 = Biggest First, 1 = Best First
+    int box_view_mode = 0;
 };
 
 class RectangleVisualizer {
@@ -62,7 +65,6 @@ private:
     std::unique_ptr<RelaxedGeometryBasedNeighborhoodSolver> relaxed_geometry_solver;
     std::unique_ptr<GreedySolver> greedy_solver;
 
-    // Threading support for solver
     std::thread solver_thread;
     std::atomic<bool> is_solving;
     std::atomic<bool> solver_thread_active;
@@ -70,7 +72,6 @@ private:
     std::vector<RectanglePlacement> pending_result;
     std::chrono::steady_clock::time_point solver_start_time;
 
-    // Threading support for benchmark
     std::thread benchmark_thread;
     std::atomic<bool> is_benchmarking;
     std::atomic<bool> benchmark_thread_active;
@@ -78,7 +79,6 @@ private:
     std::chrono::steady_clock::time_point benchmark_start_time;
     std::string benchmark_status;
 
-    // Benchmark loading
     std::vector<std::string> available_benchmark_files;
     int selected_file_index;
 
@@ -104,7 +104,6 @@ public:
     void runBenchmarkAsync();
     void runBenchmark();
 
-    // Benchmark loading methods
     void refreshBenchmarkFiles();
     void loadBenchmarkSolution(const std::string& filepath);
 

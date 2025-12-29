@@ -41,7 +41,6 @@ target_link_libraries(imgui PUBLIC ${glfw_LIBRARIES} OpenGL::GL)
 add_executable(optimalgo
         src/problem/primitives/RectanglePlacement.cpp
         src/problem/primitives/InstanceGenerator.cpp
-        src/problem/OptimizationProblem.cpp
         src/problem/RectangleFittingProblem.cpp
         src/solver/local_search/specialized_solvers/GeometryBasedNeighborhoodSolver.cpp
         src/solver/local_search/specialized_solvers/RuleBasedNeighborhoodSolver.cpp

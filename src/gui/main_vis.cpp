@@ -1,7 +1,7 @@
 #include "visualizer.h"
 
 int main() {
-    RectangleVisualizer visualizer(1200, 800);
+    RectangleVisualizer visualizer(1920, 1080);
     if (!visualizer.initialize()) {
         return -1;
     }
