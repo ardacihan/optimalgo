@@ -51,6 +51,8 @@ add_executable(optimalgo
         src/solver/greedy/GreedySolver.cpp
         src/Benchmark.cpp
         src/Benchmark.h
+        src/gui/benchmark_loader.cpp
+        src/gui/benchmark_loader.h
 )
 
 target_include_directories(optimalgo PUBLIC

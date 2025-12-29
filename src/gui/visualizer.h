@@ -78,6 +78,10 @@ private:
     std::chrono::steady_clock::time_point benchmark_start_time;
     std::string benchmark_status;
 
+    // Benchmark loading
+    std::vector<std::string> available_benchmark_files;
+    int selected_file_index;
+
     void updateScaleAndOffset();
     void updateMaxSizeLimits();
     void saveOriginalState();
@@ -99,6 +103,10 @@ public:
 
     void runBenchmarkAsync();
     void runBenchmark();
+
+    // Benchmark loading methods
+    void refreshBenchmarkFiles();
+    void loadBenchmarkSolution(const std::string& filepath);
 
     void pollEvents();
     void render();

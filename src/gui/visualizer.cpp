@@ -10,6 +10,7 @@
 #include "imgui_impl_opengl3.h"
 #include "../solver/local_search/specialized_solvers/RelaxedGeometryBasedNeighborhoodSolver.h"
 #include "../Benchmark.h"
+#include "benchmark_loader.h"
 
 static int g_changed_rect_idx = -1;
 static bool g_objective_improved = false;
@@ -358,6 +359,38 @@ void RectangleVisualizer::runBenchmark() {
     runBenchmarkAsync();
 }
 
+void RectangleVisualizer::refreshBenchmarkFiles() {
+    available_benchmark_files = BenchmarkLoader::getAvailableFiles();
+    if (selected_file_index >= (int)available_benchmark_files.size()) {
+        selected_file_index = -1;
+    }
+}
+
+void RectangleVisualizer::loadBenchmarkSolution(const std::string& filepath) {
+    auto loaded = BenchmarkLoader::load(filepath);
+    if (loaded.has_value()) {
+        current_placements = loaded->placements;
+        setBoxLength(loaded->box_size);
+        problem = RectangleFittingProblem(loaded->box_size, loaded->placements);
+
+        // Update GUI config to match loaded solution
+        gui_config.box_size = loaded->box_size;
+        gui_config.rect_count = loaded->rect_count;
+        gui_config.min_width = loaded->min_width;
+        gui_config.max_width = loaded->max_width;
+        gui_config.min_height = loaded->min_height;
+        gui_config.max_height = loaded->max_height;
+
+        saveOriginalState();
+
+        std::cout << "Loaded solution: " << loaded->solver_name
+                  << " | Boxes: " << loaded->boxes_used
+                  << " | Utilization: " << loaded->utilization << "%"
+                  << " | Objective: " << loaded->objective_value
+                  << " | Time: " << loaded->solve_time << "s"
+                  << std::endl;
+    }
+}
 
 void RectangleVisualizer::pollEvents() {
     glfwPollEvents();
@@ -621,6 +654,46 @@ void RectangleVisualizer::render() {
         // Show status message
         std::lock_guard<std::mutex> lock(benchmark_mutex);
         ImGui::Text("Status: %s", benchmark_status.c_str());
+    }
+    ImGui::Separator();
+
+    // Load Benchmark Solution section
+    ImGui::Text("Load Benchmark Solution:");
+
+    if (ImGui::Button("Refresh File List")) {
+        refreshBenchmarkFiles();
+    }
+
+    if (available_benchmark_files.empty()) {
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No benchmark XML files found");
+    } else {
+        ImGui::Text("Available files: %zu", available_benchmark_files.size());
+
+        // File selection listbox
+        ImGui::BeginChild("FileList", ImVec2(0, 150), true);
+        for (int i = 0; i < (int)available_benchmark_files.size(); i++) {
+            bool is_selected = (selected_file_index == i);
+            if (ImGui::Selectable(available_benchmark_files[i].c_str(), is_selected)) {
+                selected_file_index = i;
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::BeginDisabled(selected_file_index < 0 || is_solving || is_benchmarking);
+        if (ImGui::Button("Load Selected Benchmark")) {
+            if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
+                loadBenchmarkSolution(available_benchmark_files[selected_file_index]);
+            }
+        }
+        ImGui::EndDisabled();
+
+        if (selected_file_index >= 0 && selected_file_index < (int)available_benchmark_files.size()) {
+            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
+                               "Selected: %s", available_benchmark_files[selected_file_index].c_str());
+        }
     }
 
 

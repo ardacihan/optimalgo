@@ -13,7 +13,7 @@ GeometryBasedNeighborhoodSolver::construct_neighbors(
 
     if (n == 0) return neighbors;
 
-    const int MAX_NEIGHBORS = 2000;
+    const int MAX_NEIGHBORS = 300;
     neighbors.reserve(MAX_NEIGHBORS);
 
     // Build occupancy data structures
