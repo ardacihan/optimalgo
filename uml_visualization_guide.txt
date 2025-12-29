@@ -1,0 +1,24 @@
+   sudo apt-get install doxygen graphviz
+   doxygen -g Doxyfile -> creates doxy configuration file.
+
+      ///Edit doxy config file as:
+      PROJECT_NAME           = "Rectangle Packing Solver"
+         INPUT                  = ./src ./include
+         RECURSIVE              = YES
+         EXTRACT_ALL            = YES
+         EXTRACT_PRIVATE        = YES
+         EXTRACT_STATIC         = YES
+         HAVE_DOT               = YES
+         UML_LOOK               = YES
+         CLASS_DIAGRAMS         = YES
+         COLLABORATION_GRAPH    = YES
+         CLASS_GRAPH            = YES
+         INCLUDE_GRAPH          = YES
+         CALL_GRAPH             = YES
+         CALLER_GRAPH           = YES
+         GRAPHICAL_HIERARCHY    = YES
+         DOT_IMAGE_FORMAT       = png
+         INTERACTIVE_SVG        = YES
+      ////////
+   open html file in browser as:
+   xdg-open html/index.html

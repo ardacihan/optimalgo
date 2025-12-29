@@ -10,7 +10,6 @@
 #include <unordered_set>
 #include <unordered_map>
 
-// Structure to hold cached metrics for delta calculations
 struct SolutionMetrics {
     std::unordered_set<int> boxes_used;
     std::unordered_map<int, long long> box_area_used;
