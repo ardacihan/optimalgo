@@ -479,7 +479,7 @@ void RectangleVisualizer::render() {
 
         local_scale = std::min(max_cell_w / box_length, max_cell_h / box_length);
         local_scale = std::min(local_scale, scale_factor);
-        local_scale = std::max(local_scale, 2.0f);
+        local_scale = std::max(local_scale, 2.3f);
 
         cell_width = box_length * local_scale;
         cell_height = box_length * local_scale;

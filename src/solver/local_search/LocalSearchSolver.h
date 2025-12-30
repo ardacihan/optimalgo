@@ -12,6 +12,7 @@
 #include <random>
 #include <future>
 #include <thread>
+#include <atomic>
 
 #include "../../solver/RectangleFittingProblemSolver.h"
 
@@ -191,7 +192,6 @@ protected:
 
         std::cout << "      Created " << batches.size() << " subproblem batch(es)" << std::endl;
         for (size_t i = 0; i < batches.size(); i++) {
-            // Collect unique box IDs in this batch
             std::set<int> box_ids;
             for (const auto& r : batches[i]) {
                 box_ids.insert(r.box_id);
@@ -208,22 +208,39 @@ protected:
             std::cout << "}" << std::endl;
         }
 
+        // Use atomic counter for unique box ID offsets across parallel batches
+        std::atomic<int> next_box_offset(0);
+
         std::vector<std::future<std::pair<std::vector<RectanglePlacement>, int>>> futures;
         for (size_t i = 0; i < batches.size(); i++) {
-            futures.push_back(std::async(std::launch::async, 
-                [this, batch = batches[i], box_length, T, i]() {
+            // Calculate box ID offset for this batch before launching async
+            int box_offset = next_box_offset.fetch_add(1000);
+
+            futures.push_back(std::async(std::launch::async,
+                [this, batch = batches[i], box_length, T, i, box_offset]() {
                     std::thread::id tid = std::this_thread::get_id();
 
                     RectangleFittingProblem sub(box_length, batch);
                     int initial_obj = sub.objective(batch, T);
                     auto result = apply_local_search(sub, batch, 5, T);
+
+                    // Remap box IDs to ensure uniqueness across batches
+                    std::unordered_map<int, int> box_mapping;
+                    int local_next = 0;
+                    for (auto& rect : result) {
+                        if (box_mapping.find(rect.box_id) == box_mapping.end()) {
+                            box_mapping[rect.box_id] = box_offset + local_next++;
+                        }
+                        rect.box_id = box_mapping[rect.box_id];
+                    }
+
                     int final_obj = sub.objective(result, T);
-                    
-                    std::cout << "        [Thread " << tid << "] Batch " << (i+1) 
-                              << " - Initial obj: " << initial_obj 
-                              << ", Final obj: " << final_obj 
+
+                    std::cout << "        [Thread " << tid << "] Batch " << (i+1)
+                              << " - Initial obj: " << initial_obj
+                              << ", Final obj: " << final_obj
                               << ", Improvement: " << (final_obj - initial_obj) << std::endl;
-                    
+
                     return std::make_pair(result, final_obj);
             }));
         }
@@ -231,7 +248,7 @@ protected:
         std::vector<RectanglePlacement> merged;
         merged.reserve(rectangles.size());
         int total_subproblem_obj = 0;
-        
+
         for (size_t i = 0; i < futures.size(); i++) {
             auto [res, obj] = futures[i].get();
             merged.insert(merged.end(), res.begin(), res.end());
@@ -252,6 +269,13 @@ protected:
             max_locked_box_id = std::max(max_locked_box_id, r.box_id);
         }
 
+        // Find max box ID in active as well (since batches already have unique IDs)
+        int max_active_box_id = -1;
+        for (const auto& r : active) {
+            max_active_box_id = std::max(max_active_box_id, r.box_id);
+        }
+
+        // Remap active box IDs to come after locked box IDs
         std::unordered_map<int, int> box_id_mapping;
         int next_box_id = max_locked_box_id + 1;
 
