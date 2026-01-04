@@ -24,7 +24,7 @@ void RectangleVisualizer::reset_relaxed_temperature() {
 void RectangleVisualizer::updateT() {
     double current_temperature = gui_config.T;
     double min_temperature = 0.0;
-    double cooling_rate = 0.94;
+    double cooling_rate = 0.97;
     current_temperature = current_temperature * std::pow(cooling_rate, 1);
     current_temperature = std::max(min_temperature, current_temperature);
     gui_config.T = (int)current_temperature;
@@ -170,7 +170,9 @@ void RectangleVisualizer::generateRandomProblem() {
     reset_relaxed_temperature();
 }
 
+//Solver is called here
 void RectangleVisualizer::runSolver() {
+    //prepare multi threadding
     if (is_solving || solver_thread_active) {
         return;
     }
@@ -183,6 +185,7 @@ void RectangleVisualizer::runSolver() {
     solver_thread_active = true;
     solver_start_time = std::chrono::steady_clock::now();
 
+    //Call solver depending on config
     solver_thread = std::thread([this]() {
         std::vector<RectanglePlacement> result;
 

@@ -18,7 +18,6 @@ double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>&
     int total_edge_touching = 0;
     int total_overlap_area = 0;
 
-    // Single pass: compute box usage and boundary touching
     for (const auto& rect : solution) {
         box_area_used[rect.box_id] += rect.width * rect.height;
 
@@ -30,14 +29,12 @@ double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>&
         if (rect.y + h == L) total_edge_touching += w;
     }
 
-    // Utilization score (cubic)
     double utilization_score = 0.0;
     for (const auto& [box_id, area] : box_area_used) {
         double util = std::min(1.0, area / box_capacity);
         utilization_score += util * util * 100.0;
     }
 
-    // Pairwise comparisons: touching and overlaps
     for (size_t i = 0; i < solution.size(); i++) {
         const auto& r1 = solution[i];
         int w1 = r1.get_actual_width();
@@ -63,7 +60,13 @@ double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>&
         }
     }
 
-    double overlap_penalty = total_overlap_area * std::exp(2000.0 / std::max(T, 1)) * 1000;
+    double temperature_factor = 1.0 - (T / 1000.0); // 0 when T=1000, 1 when T=0
+    temperature_factor = std::max(0.0, std::min(1.0, temperature_factor));
+
+    // Start punishing overlaps more heavily as temperature decreases
+    double overlap_penalty_weight = temperature_factor * temperature_factor * 10000.0; // Quadratic growth
+    double overlap_penalty = total_overlap_area * overlap_penalty_weight;
+
     double score = utilization_score * 20000 +
                    total_edge_touching * EDGE_BONUS -
                    box_area_used.size() * BOX_PENALTY -

@@ -26,7 +26,6 @@ class RectangleFittingProblem : public OptimizationProblem<std::vector<Rectangle
 private:
     int L;
     std::vector<RectanglePlacement> current_solution;
-    SolutionMetrics cached_metrics;
     bool metrics_valid;
 
     bool check_no_overlaps(const std::vector<RectanglePlacement>& current_solution) const;
@@ -58,7 +57,6 @@ public:
 
     int get_box_length() const { return L; }
 
-    const SolutionMetrics& get_cached_metrics() const { return cached_metrics; }
     void invalidate_metrics() { metrics_valid = false; }
 
     std::unordered_map<int, int> get_coverage_each_bounding_box() const {
