@@ -7,50 +7,59 @@ std::vector<RectanglePlacement> GreedySolver::solve_one_step(RectangleFittingPro
 
     // If this is the first step, initialize
     if (step_index == 0) {
-        step_placements.clear();
+        step_indices.clear();
+        placed_rectangles.clear();
         occupancy_grids.clear();
         next_box_id = 0;
         
-        // Sort rectangles based on strategy
-        std::vector<RectanglePlacement> rectangles_to_place = original_solution;
+        // Create a list of indices sorted by the strategy
+        step_indices.resize(original_solution.size());
+        for (size_t i = 0; i < step_indices.size(); i++) {
+            step_indices[i] = i;
+        }
         
+        // Sort indices based on strategy
         if (current_strategy == 0) { // Biggest first
-            std::sort(rectangles_to_place.begin(), rectangles_to_place.end(),
-                [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                    int area_a = a.width * a.height;
-                    int area_b = b.width * b.height;
+            std::sort(step_indices.begin(), step_indices.end(),
+                [&original_solution](int a, int b) {
+                    int area_a = original_solution[a].width * original_solution[a].height;
+                    int area_b = original_solution[b].width * original_solution[b].height;
                     return area_a > area_b;
                 });
         } else if (current_strategy == 1) { // Smallest first
-            std::sort(rectangles_to_place.begin(), rectangles_to_place.end(),
-                [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                    int area_a = a.width * a.height;
-                    int area_b = b.width * b.height;
+            std::sort(step_indices.begin(), step_indices.end(),
+                [&original_solution](int a, int b) {
+                    int area_a = original_solution[a].width * original_solution[a].height;
+                    int area_b = original_solution[b].width * original_solution[b].height;
                     return area_a < area_b;
                 });
         } else { // Best fit (biggest first for initial sort)
-            std::sort(rectangles_to_place.begin(), rectangles_to_place.end(),
-                [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                    int area_a = a.width * a.height;
-                    int area_b = b.width * b.height;
+            std::sort(step_indices.begin(), step_indices.end(),
+                [&original_solution](int a, int b) {
+                    int area_a = original_solution[a].width * original_solution[a].height;
+                    int area_b = original_solution[b].width * original_solution[b].height;
                     return area_a > area_b;
                 });
         }
         
-        step_placements = rectangles_to_place;
+        // Initialize placed_rectangles to track placed status
+        placed_rectangles.assign(original_solution.size(), false);
     }
 
     // If we've placed all rectangles, return current solution
-    if (step_index >= step_placements.size()) {
+    if (step_index >= step_indices.size()) {
         return problem.get_current_solution();
     }
 
+    int original_idx = step_indices[step_index];
+    const auto& rect_to_place = original_solution[original_idx];
+    
     // Place the next rectangle
-    RectanglePlacement placed = problem.get_current_solution()[0];
+    RectanglePlacement placed;
     
     if (current_strategy == 2) { // Best fit strategy
         // For best fit, we need to consider all boxes for each rectangle
-        RectanglePlacement best_placement = step_placements[step_index];
+        RectanglePlacement best_placement = rect_to_place;
         int best_box_id = -1;
         int best_fit_score = -1;
         int L = problem.get_box_length();
@@ -63,10 +72,10 @@ std::vector<RectanglePlacement> GreedySolver::solve_one_step(RectangleFittingPro
 
             // Try both orientations
             for (int rot = 0; rot < 2; rot++) {
-                if (rot == 1 && step_placements[step_index].width == step_placements[step_index].height) continue;
+                if (rot == 1 && rect_to_place.width == rect_to_place.height) continue;
 
-                int w = (rot == 0) ? step_placements[step_index].width : step_placements[step_index].height;
-                int h = (rot == 0) ? step_placements[step_index].height : step_placements[step_index].width;
+                int w = (rot == 0) ? rect_to_place.width : rect_to_place.height;
+                int h = (rot == 0) ? rect_to_place.height : rect_to_place.width;
 
                 if (w > L || h > L) continue;
 
@@ -78,8 +87,8 @@ std::vector<RectanglePlacement> GreedySolver::solve_one_step(RectangleFittingPro
                             if (fit_score > best_fit_score) {
                                 best_fit_score = fit_score;
                                 best_placement = RectanglePlacement(
-                                    step_placements[step_index].width,
-                                    step_placements[step_index].height,
+                                    rect_to_place.width,
+                                    rect_to_place.height,
                                     x, y, (rot == 1), box_id
                                 );
                                 best_box_id = box_id;
@@ -92,28 +101,40 @@ std::vector<RectanglePlacement> GreedySolver::solve_one_step(RectangleFittingPro
 
         // If no good fit found, create new box
         if (best_box_id == -1) {
-            placed = place_rectangle_step(problem, step_placements[step_index]);
+            placed = place_rectangle_step(problem, rect_to_place);
         } else {
             placed = best_placement;
             mark_occupied(placed, occupancy_grids, step_index, problem.get_box_length());
         }
     } else {
         // For biggest/smallest first, use simple placement
-        placed = place_rectangle_step(problem, step_placements[step_index]);
+        placed = place_rectangle_step(problem, rect_to_place);
     }
 
-    // Update the solution in the problem
-    auto current_solution = problem.get_current_solution();
-    if (step_index < current_solution.size()) {
-        current_solution[step_index] = placed;
-    } else {
-        current_solution.push_back(placed);
+    // Mark this rectangle as placed
+    placed_rectangles[original_idx] = true;
+    
+    // Build the complete solution
+    std::vector<RectanglePlacement> new_solution = original_solution;
+    
+    // Update the placed rectangle in the solution
+    new_solution[original_idx] = placed;
+    
+    // For unplaced rectangles, keep them as-is (with default positions)
+    for (size_t i = 0; i < new_solution.size(); i++) {
+        if (!placed_rectangles[i]) {
+            // Reset unplaced rectangles to default position
+            new_solution[i].x = 0;
+            new_solution[i].y = 0;
+            new_solution[i].box_id = 0;
+            new_solution[i].rotated = false;
+        }
     }
     
-    problem.set_current_solution(current_solution);
+    problem.set_current_solution(new_solution);
     step_index++;
 
-    return current_solution;
+    return new_solution;
 }
 
 // Step-by-step placement helper

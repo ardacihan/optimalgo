@@ -11,6 +11,12 @@ public:
     std::vector<std::vector<RectanglePlacement>> construct_neighbors(
         RectangleFittingProblem &problem, int T) override;
 
+    void add_exploration_moves(const std::vector<RectanglePlacement> &solution, int L, long long box_capacity,
+                               std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors);
+
+    void add_fixing_moves(const std::vector<RectanglePlacement> &solution, int L, long long box_capacity,
+                          std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors);
+
     void add_exploration_moves(const std::vector<RectanglePlacement> &solution, int L, double overlap_tolerance,
                                std::vector<std::vector<RectanglePlacement>> &neighbors, int max_neighbors);
 

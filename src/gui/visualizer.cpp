@@ -649,10 +649,10 @@ void RectangleVisualizer::render() {
 
 
         ImGui::SliderInt("Temperature (T)", &gui_config.T, 1, 10000);
-        ImGui::SliderInt("Reruns", &gui_config.num_reruns, 1, 10);
-        ImGui::SliderInt("Max Subproblem", &gui_config.max_rectangle_in_subproblem, 10, 200);
+        //ImGui::SliderInt("Reruns", &gui_config.num_reruns, 1, 10);
+        //ImGui::SliderInt("Max Subproblem", &gui_config.max_rectangle_in_subproblem, 10, 200);
 
-        ImGui::Spacing();
+        //ImGui::Spacing();
 
         if (is_solving && !is_benchmarking) {
             auto now = std::chrono::steady_clock::now();

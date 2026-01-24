@@ -1,7 +1,3 @@
-//
-// RectanglePlacement.h
-//
-
 #ifndef RECTANGLEPLACEMENT_H
 #define RECTANGLEPLACEMENT_H
 
@@ -15,6 +11,9 @@ struct RectanglePlacement {
     bool rotated;
     int box_id;
     int move_id = -1;
+
+    // Default constructor
+    RectanglePlacement() : width(0), height(0), x(0), y(0), rotated(false), box_id(0) {}
 
     RectanglePlacement(int w, int h, int x_pos, int y_pos, bool rot, int box)
         : width(w), height(h), x(x_pos), y(y_pos), rotated(rot), box_id(box) {}

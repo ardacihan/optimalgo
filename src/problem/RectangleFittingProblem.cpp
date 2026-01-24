@@ -8,7 +8,7 @@ double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>&
 }
 
 double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
-    const double BOX_PENALTY = 10000000;
+    const double BOX_PENALTY = 10000;
     const double EDGE_BONUS = 2.0;
 
     if (solution.empty()) return 0;
@@ -64,7 +64,7 @@ double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>&
     temperature_factor = std::max(0.0, std::min(1.0, temperature_factor));
 
     // Start punishing overlaps more heavily as temperature decreases
-    double overlap_penalty_weight = temperature_factor * temperature_factor * 10000.0; // Quadratic growth
+    double overlap_penalty_weight = temperature_factor * temperature_factor * 100000.0; // Quadratic growth
     double overlap_penalty = total_overlap_area * overlap_penalty_weight;
 
     double score = utilization_score * 20000 +

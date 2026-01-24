@@ -20,19 +20,22 @@ public:
         current_strategy = strategy_type;
     }
 
+
     void reset_state() {
         step_index = 0;
-        step_placements.clear();
+        step_indices.clear();
+        placed_rectangles.clear();
         occupancy_grids.clear();
         next_box_id = 0;
     }
 
 private:
     int current_strategy = 0;
-    
+
     // Step-by-step state
     int step_index = 0;
-    std::vector<RectanglePlacement> step_placements;
+    std::vector<int> step_indices; // Sorted indices of rectangles to place
+    std::vector<bool> placed_rectangles; // Track which original rectangles have been placed
     std::vector<std::vector<int>> occupancy_grids;
     int next_box_id = 0;
 
