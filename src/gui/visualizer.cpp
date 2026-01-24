@@ -163,6 +163,12 @@ void RectangleVisualizer::generateInstance() {
 
     setPlacements(problem.get_current_solution());
     setBoxLength(gui_config.box_size);
+
+    // Reset solver states
+    reset_relaxed_temperature();
+    if (greedy_solver) {
+        greedy_solver->reset_state();
+    }
 }
 
 void RectangleVisualizer::generateRandomProblem() {
@@ -238,35 +244,40 @@ void RectangleVisualizer::solveNextStep() {
 
     std::vector<RectanglePlacement> new_solution;
 
-    switch (gui_config.local_search_strategy) {
-        case 0: // Geometry Based
-            if (!geometry_solver) {
-                geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
-            }
-            new_solution = geometry_solver->solve_one_step(problem, gui_config.T);
-            current_placements = new_solution;
-            problem.set_current_solution(new_solution);
-            break;
+    if (gui_config.solver_type == 0) { // Local Search
+        switch (gui_config.local_search_strategy) {
+            case 0: // Geometry Based
+                if (!geometry_solver) {
+                    geometry_solver = std::make_unique<GeometryBasedNeighborhoodSolver>();
+                }
+                new_solution = geometry_solver->solve_one_step(problem, gui_config.T);
+                break;
 
-        case 1: // Permutation Based
-            if (!permutation_solver) {
-                permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
-            }
-            new_solution = permutation_solver->solve_one_step(problem, gui_config.T);
-            current_placements = new_solution;
-            problem.set_current_solution(new_solution);
-            break;
+            case 1: // Permutation Based
+                if (!permutation_solver) {
+                    permutation_solver = std::make_unique<RuleBasedNeighborhoodSolver>();
+                }
+                new_solution = permutation_solver->solve_one_step(problem, gui_config.T);
+                break;
 
-        case 2: // Relaxed Geometry Based
-            if (!relaxed_geometry_solver) {
-                relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
-            }
-            new_solution = relaxed_geometry_solver->solve_one_step(problem, gui_config.T);
-            current_placements = new_solution;
-            problem.set_current_solution(new_solution);
-            updateT();
-            break;
+            case 2: // Relaxed Geometry Based
+                if (!relaxed_geometry_solver) {
+                    relaxed_geometry_solver = std::make_unique<RelaxedGeometryBasedNeighborhoodSolver>();
+                }
+                new_solution = relaxed_geometry_solver->solve_one_step(problem, gui_config.T);
+                updateT();
+                break;
+        }
+    } else { // Greedy Solver
+        if (!greedy_solver) {
+            greedy_solver = std::make_unique<GreedySolver>();
+        }
+        greedy_solver->set_selection_strategy(gui_config.greedy_strategy);
+        new_solution = greedy_solver->solve_one_step(problem, gui_config.T);
     }
+
+    current_placements = new_solution;
+    problem.set_current_solution(new_solution);
 
     int new_objective = problem.objective(new_solution);
 
@@ -289,8 +300,15 @@ void RectangleVisualizer::solveNextStep() {
                 break;
             }
         }
-    }
+    } else if (new_solution.size() > prev_solution.size()) {
+        // For Greedy step-by-step, highlight the newly placed rectangle
+        g_changed_rect_idx = (int)new_solution.size() - 1;
 
+        if (!new_solution.empty()) {
+            gui_config.view_all_boxes = false;
+            gui_config.target_box_id = new_solution.back().box_id;
+        }
+    }
     g_objective_improved = (new_objective < prev_objective);
 
     // Update for next step
@@ -298,12 +316,18 @@ void RectangleVisualizer::solveNextStep() {
     prev_objective = new_objective;
 }
 
+
 void RectangleVisualizer::revertToOriginal() {
     if (!original_placements.empty()) {
         current_placements = original_placements;
         problem = RectangleFittingProblem(gui_config.box_size, original_placements);
         setPlacements(original_placements);
         reset_relaxed_temperature();
+
+        // Reset greedy solver state if it exists
+        if (greedy_solver) {
+            greedy_solver->reset_state();
+        }
     }
 }
 
@@ -608,20 +632,21 @@ void RectangleVisualizer::render() {
             ImGui::Text("Local Search Strategy:");
             const char* local_strategies[] = { "Geometry Based", "Permutation Based", "Relaxed Geometry Based"};
             ImGui::Combo("Strategy", &gui_config.local_search_strategy, local_strategies, IM_ARRAYSIZE(local_strategies));
-
-            ImGui::Spacing();
-            ImGui::BeginDisabled(is_solving || is_benchmarking);
-            if (ImGui::Button("Solve One Step", ImVec2(-1, 0))) {
-                solveNextStep();
-            }
-            ImGui::EndDisabled();
-            ImGui::Spacing();
         } else {
             ImGui::Text("Greedy Strategy:");
             const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
             ImGui::Combo("Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));
-            ImGui::Spacing();
         }
+
+        // Show "Solve One Step" button for both Local Search and Greedy
+        ImGui::Spacing();
+        ImGui::BeginDisabled(is_solving || is_benchmarking);
+        if (ImGui::Button("Solve One Step", ImVec2(-1, 0))) {
+            solveNextStep();
+        }
+        ImGui::EndDisabled();
+        ImGui::Spacing();
+
 
         ImGui::SliderInt("Temperature (T)", &gui_config.T, 1, 10000);
         ImGui::SliderInt("Reruns", &gui_config.num_reruns, 1, 10);
