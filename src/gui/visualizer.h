@@ -82,6 +82,8 @@ private:
     std::vector<std::string> available_benchmark_files;
     int selected_file_index;
 
+    bool greedy_step_by_step_initialized = false;
+
     void updateScaleAndOffset();
     void updateMaxSizeLimits();
     void saveOriginalState();
@@ -108,6 +110,9 @@ public:
     void loadBenchmarkSolution(const std::string& filepath);
 
     void pollEvents();
+
+    void solveGreedyNextStep();
+
     void render();
     bool shouldClose() const;
 };

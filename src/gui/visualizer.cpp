@@ -168,6 +168,9 @@ void RectangleVisualizer::generateInstance() {
 void RectangleVisualizer::generateRandomProblem() {
     generateInstance();
     reset_relaxed_temperature();
+    if (greedy_solver) {
+        greedy_solver->reset_step_by_step();
+    }
 }
 
 //Solver is called here
@@ -304,6 +307,9 @@ void RectangleVisualizer::revertToOriginal() {
         problem = RectangleFittingProblem(gui_config.box_size, original_placements);
         setPlacements(original_placements);
         reset_relaxed_temperature();
+        if (greedy_solver) {
+            greedy_solver->reset_step_by_step();
+        }
     }
 }
 
@@ -397,6 +403,38 @@ void RectangleVisualizer::loadBenchmarkSolution(const std::string& filepath) {
 
 void RectangleVisualizer::pollEvents() {
     glfwPollEvents();
+}
+
+void RectangleVisualizer::solveGreedyNextStep() {
+    if (!greedy_solver) {
+        greedy_solver = std::make_unique<GreedySolver>();
+    }
+
+    greedy_solver->set_selection_strategy(gui_config.greedy_strategy);
+
+    // Get current solution before placing next rectangle
+    std::vector<RectanglePlacement> prev_solution = problem.get_current_solution();
+
+    // Solve one step
+    std::vector<RectanglePlacement> new_solution = greedy_solver->solve_one_step(problem);
+
+    if (!new_solution.empty() && new_solution.size() > prev_solution.size()) {
+        int new_objective = problem.objective(new_solution);
+        int prev_objective = problem.objective(prev_solution);
+
+        // Update visualization state - highlight the newly placed rectangle
+        g_changed_rect_idx = (int)(new_solution.size() - 1);
+
+        // Auto-switch to the box containing the new rectangle
+        gui_config.view_all_boxes = false;
+        gui_config.target_box_id = new_solution.back().box_id;
+
+        g_objective_improved = (new_objective < prev_objective);
+
+        // Update the problem with the new solution
+        problem.set_current_solution(new_solution);
+        current_placements = new_solution;
+    }
 }
 
 void RectangleVisualizer::render() {
@@ -620,6 +658,13 @@ void RectangleVisualizer::render() {
             ImGui::Text("Greedy Strategy:");
             const char* greedy_strategies[] = { "Biggest First", "Smallest First", "Best Fit" };
             ImGui::Combo("Strategy", &gui_config.greedy_strategy, greedy_strategies, IM_ARRAYSIZE(greedy_strategies));
+
+            ImGui::Spacing();
+            ImGui::BeginDisabled(is_solving || is_benchmarking);
+            if (ImGui::Button("Solve One Step", ImVec2(-1, 0))) {
+                solveGreedyNextStep();
+            }
+            ImGui::EndDisabled();
             ImGui::Spacing();
         }
 
