@@ -13,84 +13,6 @@ std::vector<RectanglePlacement> GreedySolver::solve(RectangleFittingProblem &pro
     }
 }
 
-void GreedySolver::reset_step_by_step() {
-    sorted_rectangles.clear();
-    current_rectangle_index = 0;
-    occupancy_grids.clear();
-    next_box_id = 0;
-    step_by_step_initialized = false;
-    current_solution.clear();
-}
-
-void GreedySolver::init_step_by_step(RectangleFittingProblem &problem) {
-    reset_step_by_step();
-
-    auto original_solution = problem.get_current_solution();
-    if (original_solution.empty()) {
-        return;
-    }
-
-    // Store the rectangles to sort
-    sorted_rectangles = original_solution;
-
-    // Sort according to current strategy
-    if (current_strategy == 0) { // Biggest first
-        std::sort(sorted_rectangles.begin(), sorted_rectangles.end(),
-            [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                int area_a = a.width * a.height;
-                int area_b = b.width * b.height;
-                return area_a > area_b;
-            });
-    } else if (current_strategy == 1) { // Smallest first
-        std::sort(sorted_rectangles.begin(), sorted_rectangles.end(),
-            [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                int area_a = a.width * a.height;
-                int area_b = b.width * b.height;
-                return area_a < area_b;
-            });
-    } else { // Best fit (biggest first for initial sort)
-        std::sort(sorted_rectangles.begin(), sorted_rectangles.end(),
-            [](const RectanglePlacement& a, const RectanglePlacement& b) {
-                int area_a = a.width * a.height;
-                int area_b = b.width * b.height;
-                return area_a > area_b;
-            });
-    }
-
-    step_by_step_initialized = true;
-}
-
-bool GreedySolver::has_next_step() const {
-    return step_by_step_initialized && (current_rectangle_index < sorted_rectangles.size());
-}
-
-std::vector<RectanglePlacement> GreedySolver::solve_one_step(RectangleFittingProblem &problem) {
-    if (!step_by_step_initialized) {
-        init_step_by_step(problem);
-    }
-
-    if (!has_next_step()) {
-        return current_solution;
-    }
-
-    int L = problem.get_box_length();
-
-    // Place the current rectangle using the existing place_rectangle function
-    RectanglePlacement placed = place_rectangle(problem, sorted_rectangles[current_rectangle_index],
-                                               occupancy_grids, next_box_id);
-
-    // Mark as occupied
-    mark_occupied(placed, occupancy_grids, current_rectangle_index, L);
-
-    // Add to solution
-    current_solution.push_back(placed);
-
-    // Move to next rectangle
-    current_rectangle_index++;
-
-    return current_solution;
-}
-
 std::vector<RectanglePlacement> GreedySolver::solve_biggest_first(RectangleFittingProblem &problem) {
     auto original_solution = problem.get_current_solution();
     if (original_solution.empty()) return original_solution;
@@ -156,6 +78,7 @@ RectanglePlacement GreedySolver::place_rectangle(RectangleFittingProblem &proble
                                                 const RectanglePlacement &selected_rect,
                                                 std::vector<std::vector<int>>& occupancy_grids,
                                                 int& next_box_id) {
+    // Your existing implementation
     int L = problem.get_box_length();
     int width = selected_rect.width;
     int height = selected_rect.height;

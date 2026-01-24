@@ -17,27 +17,12 @@ public:
         current_strategy = strategy_type;
     }
 
-    // Step-by-step solving methods
-    void init_step_by_step(RectangleFittingProblem &problem);
-    bool has_next_step() const;
-    std::vector<RectanglePlacement> solve_one_step(RectangleFittingProblem &problem);
-    void reset_step_by_step();
-
 private:
     int current_strategy = 0;
-
-    // State for step-by-step solving
-    std::vector<RectanglePlacement> sorted_rectangles;
-    size_t current_rectangle_index = 0;
-    std::vector<std::vector<int>> occupancy_grids;
-    int next_box_id = 0;
-    bool step_by_step_initialized = false;
-    std::vector<RectanglePlacement> current_solution;
 
     // Main solve functions
     std::vector<RectanglePlacement> solve_biggest_first(RectangleFittingProblem &problem);
     std::vector<RectanglePlacement> solve_smallest_first(RectangleFittingProblem &problem);
-    std::vector<RectanglePlacement> solve_best_fit(RectangleFittingProblem &problem);
 
     // Placement utilities
     RectanglePlacement place_rectangle(RectangleFittingProblem &problem,
@@ -51,6 +36,8 @@ private:
     void mark_occupied(const RectanglePlacement& placement,
                       std::vector<std::vector<int>>& occupancy_grids,
                       int rect_idx, int L);
+
+    std::vector<RectanglePlacement> solve_best_fit(RectangleFittingProblem &problem);
 
     int calculate_fit_score(int x, int y, int w, int h, const std::vector<int> &grid, int L);
 };
