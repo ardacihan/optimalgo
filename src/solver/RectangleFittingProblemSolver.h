@@ -8,11 +8,6 @@
 
 
 #include <vector>
-#include <unordered_map>
-#include <unordered_set>
-#include <algorithm>
-#include <iostream>
-#include <cmath>
 #include "../problem/RectangleFittingProblem.h"
 
 

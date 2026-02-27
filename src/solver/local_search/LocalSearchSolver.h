@@ -262,8 +262,7 @@ protected:
 
     std::vector<RectanglePlacement>
     merge_solutions(const std::vector<RectanglePlacement>& locked,
-                   std::vector<RectanglePlacement> active)
-    {
+                   std::vector<RectanglePlacement> active){
         int max_locked_box_id = -1;
         for (const auto& r : locked) {
             max_locked_box_id = std::max(max_locked_box_id, r.box_id);

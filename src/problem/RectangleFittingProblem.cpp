@@ -3,10 +3,6 @@
 #include <climits>
 #include <cmath>
 
-double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution) {
-    return objective(solution, 1000);
-}
-
 double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution, int T) {
     const double BOX_PENALTY = 10000000;
     const double EDGE_BONUS = 2.0;
@@ -108,3 +104,9 @@ bool RectangleFittingProblem::check_within_boxes(const std::vector<RectanglePlac
 bool RectangleFittingProblem::solution_legal(const std::vector<RectanglePlacement>& current_solution) const {
     return check_no_overlaps(current_solution) && check_within_boxes(current_solution);
 }
+
+
+double RectangleFittingProblem::objective(const std::vector<RectanglePlacement>& solution) {
+    return objective(solution, 1000);
+}
+
